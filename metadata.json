@@ -1,0 +1,7 @@
+{
+  "name": "NuVision AI by Amit",
+  "description": "AI-powered nutrition assistant that analyzes food photos, labels, and personal fitness goals for real-time health insights and portion correction.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
