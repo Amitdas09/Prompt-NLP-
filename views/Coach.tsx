@@ -162,7 +162,8 @@ const Coach: React.FC<CoachProps> = ({ profile, logs, theme }) => {
           <div className={`w-full max-w-sm rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 ${theme === 'dark' ? 'bg-slate-900 border border-slate-800' : 'bg-white'}`}>
             <div className="p-8 text-center space-y-6">
               <div className={`inline-flex p-6 rounded-3xl ${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-50'}`}>
-                {React.cloneElement(selectedMilestone.icon as React.ReactElement, { size: 48 })}
+                {/* Use permissive cast to any to allow size prop injection without build error */}
+                {React.cloneElement(selectedMilestone.icon as React.ReactElement<any>, { size: 48 })}
               </div>
               
               <div>
