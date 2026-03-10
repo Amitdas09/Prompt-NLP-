@@ -1,6 +1,8 @@
 
 import React, { useState } from 'react';
 import { UserProfile, UserGoal, ActivityLevel } from '../types';
+import { LogOut } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 interface ProfileProps {
   profile: UserProfile;
@@ -46,6 +48,16 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdate, theme }) => {
     const targets = calculateTargets(formData);
     onUpdate({ ...formData, ...targets });
     alert("Profile updated successfully!");
+  };
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      alert(error.message);
+    } else {
+      // App.tsx handles the state change via onAuthStateChange
+      window.location.hash = '#/'; // Redirect to home/onboarding
+    }
   };
 
   return (
@@ -133,6 +145,14 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdate, theme }) => {
           ))}
         </div>
       </div>
+
+      <button
+        onClick={handleLogout}
+        className={`w-full flex items-center justify-center gap-2 font-bold py-4 rounded-2xl transition-all border-2 ${theme === 'dark' ? 'border-red-900/30 text-red-400 hover:bg-red-950/30' : 'border-red-100 text-red-600 hover:bg-red-50'}`}
+      >
+        <LogOut size={20} />
+        Log Out
+      </button>
     </div>
   );
 };

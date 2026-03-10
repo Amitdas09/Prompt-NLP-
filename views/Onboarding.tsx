@@ -1,14 +1,23 @@
 
 import React, { useState } from 'react';
 import { UserProfile, UserGoal, ActivityLevel } from '../types';
-import { Zap, ChevronRight } from 'lucide-react';
+import { Zap, ChevronRight, LogIn } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 interface OnboardingProps {
   onComplete: (profile: UserProfile) => void;
   theme: 'light' | 'dark';
+  initialLoginMode?: boolean;
+  user: any;
 }
 
-const Onboarding: React.FC<OnboardingProps> = ({ onComplete, theme }) => {
+const Onboarding: React.FC<OnboardingProps> = ({ onComplete, theme, initialLoginMode = false, user }) => {
+  const [isLoginMode, setIsLoginMode] = useState(initialLoginMode);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+
   const [formData, setFormData] = useState({
     name: '',
     age: 25,
@@ -18,6 +27,32 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, theme }) => {
     goal: UserGoal.MAINTENANCE,
     activityLevel: ActivityLevel.MODERATE
   });
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setIsAuthLoading(true);
+
+    try {
+      if (isLoginMode) {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+          if (error.message.includes('Invalid login credentials')) {
+            throw new Error('Account does not exist or incorrect password. Please check your details or sign up.');
+          }
+          throw error;
+        }
+      } else {
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        alert('Check your email for the confirmation link!');
+      }
+    } catch (err: any) {
+      setAuthError(err.message);
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
 
   const calculateTargets = () => {
     let bmr = 10 * formData.weight + 6.25 * formData.height - 5 * formData.age;
@@ -70,101 +105,168 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, theme }) => {
           <p className="text-slate-500 font-medium">Empowering your health with Computer Vision</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white p-8 rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-slate-100 space-y-6">
-          <div className="space-y-1.5">
-            <label className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">Full Name</label>
-            <input
-              type="text"
-              required
-              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all placeholder:text-slate-400 font-bold text-lg"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="e.g. Alex Johnson"
-            />
-          </div>
+        <div className="bg-white p-8 rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-slate-100 space-y-6">
+          {!user ? (
+            <>
+              <div className="flex p-1 bg-slate-100 rounded-2xl">
+                <button 
+                  onClick={() => setIsLoginMode(false)}
+                  className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${!isLoginMode ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
+                >
+                  Sign Up
+                </button>
+                <button 
+                  onClick={() => setIsLoginMode(true)}
+                  className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${isLoginMode ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
+                >
+                  Log In
+                </button>
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
+              <form onSubmit={handleAuth} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Email</label>
+                  <input
+                    type="email"
+                    required
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Password</label>
+                  <input
+                    type="password"
+                    required
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                  />
+                </div>
+                {authError && <p className="text-red-500 text-[10px] font-bold px-1">{authError}</p>}
+                <button
+                  type="submit"
+                  disabled={isAuthLoading}
+                  className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl hover:bg-emerald-700 transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isAuthLoading ? 'Processing...' : (isLoginMode ? 'Log In' : 'Sign Up')}
+                  <LogIn size={18} />
+                </button>
+              </form>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-100"></span></div>
+                <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest"><span className="bg-white px-2 text-slate-300">Or continue as guest</span></div>
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-2">
+              <p className="text-emerald-600 font-black text-sm uppercase tracking-widest">Authenticated as</p>
+              <p className="text-slate-900 font-bold truncate">{user.email}</p>
+              <div className="h-px bg-slate-100 my-4"></div>
+              <p className="text-slate-500 text-xs font-medium">Please complete your profile details below to continue.</p>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Age</label>
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">Full Name</label>
               <input
-                type="number"
-                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-lg"
-                value={formData.age}
-                onChange={(e) => setFormData({ ...formData, age: Number(e.target.value) })}
+                type="text"
+                required
+                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all placeholder:text-slate-400 font-bold text-lg"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="e.g. Alex Johnson"
               />
             </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Age</label>
+                <input
+                  type="number"
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-lg"
+                  value={formData.age}
+                  onChange={(e) => setFormData({ ...formData, age: Number(e.target.value) })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Gender</label>
+                <select
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none appearance-none cursor-pointer font-bold text-lg"
+                  value={formData.gender}
+                  onChange={(e) => setFormData({ ...formData, gender: e.target.value as any })}
+                >
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Weight (kg)</label>
+                <input
+                  type="number"
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-lg"
+                  value={formData.weight}
+                  onChange={(e) => setFormData({ ...formData, weight: Number(e.target.value) })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Height (cm)</label>
+                <input
+                  type="number"
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-lg"
+                  value={formData.height}
+                  onChange={(e) => setFormData({ ...formData, height: Number(e.target.value) })}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Fitness Goal</label>
+              <div className="grid grid-cols-2 gap-2">
+                {Object.values(UserGoal).map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, goal: g })}
+                    className={`px-3 py-3 rounded-2xl text-[11px] font-black transition-all border-2 ${formData.goal === g ? 'bg-emerald-600 border-emerald-600 text-white shadow-xl shadow-emerald-200' : 'bg-white border-slate-100 text-slate-400 hover:border-emerald-200 hover:bg-slate-50'}`}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Gender</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Activity Level</label>
               <select
-                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none appearance-none cursor-pointer font-bold text-lg"
-                value={formData.gender}
-                onChange={(e) => setFormData({ ...formData, gender: e.target.value as any })}
+                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none appearance-none cursor-pointer font-bold"
+                value={formData.activityLevel}
+                onChange={(e) => setFormData({ ...formData, activityLevel: e.target.value as ActivityLevel })}
               >
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-                <option value="other">Other</option>
+                {Object.values(ActivityLevel).map((a) => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
               </select>
             </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Weight (kg)</label>
-              <input
-                type="number"
-                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-lg"
-                value={formData.weight}
-                onChange={(e) => setFormData({ ...formData, weight: Number(e.target.value) })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Height (cm)</label>
-              <input
-                type="number"
-                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-lg"
-                value={formData.height}
-                onChange={(e) => setFormData({ ...formData, height: Number(e.target.value) })}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Fitness Goal</label>
-            <div className="grid grid-cols-2 gap-2">
-              {Object.values(UserGoal).map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => setFormData({ ...formData, goal: g })}
-                  className={`px-3 py-3 rounded-2xl text-[11px] font-black transition-all border-2 ${formData.goal === g ? 'bg-emerald-600 border-emerald-600 text-white shadow-xl shadow-emerald-200' : 'bg-white border-slate-100 text-slate-400 hover:border-emerald-200 hover:bg-slate-50'}`}
-                >
-                  {g}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Activity Level</label>
-            <select
-              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none appearance-none cursor-pointer font-bold"
-              value={formData.activityLevel}
-              onChange={(e) => setFormData({ ...formData, activityLevel: e.target.value as ActivityLevel })}
+            <button
+              type="submit"
+              className="w-full bg-slate-900 text-white font-black py-5 rounded-[2rem] hover:bg-emerald-600 transition-all shadow-2xl flex items-center justify-center gap-2 mt-2 text-xl active:scale-95 transform"
             >
-              {Object.values(ActivityLevel).map((a) => (
-                <option key={a} value={a}>{a}</option>
-              ))}
-            </select>
-          </div>
-
-          <button
-            type="submit"
-            className="w-full bg-slate-900 text-white font-black py-5 rounded-[2rem] hover:bg-emerald-600 transition-all shadow-2xl flex items-center justify-center gap-2 mt-2 text-xl active:scale-95 transform"
-          >
-            Create Profile
-            <ChevronRight size={24} />
-          </button>
-        </form>
+              Create Profile
+              <ChevronRight size={24} />
+            </button>
+          </form>
+        </div>
 
         <p className="text-center text-slate-400 text-[10px] uppercase font-black tracking-[0.2em]">
           Vision Intelligence Engine v1.0

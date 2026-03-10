@@ -9,14 +9,51 @@ import Profile from './views/Profile';
 import Onboarding from './views/Onboarding';
 import Header from './components/Header';
 import Navbar from './components/Navbar';
+import { supabase } from './lib/supabase';
+import { User } from '@supabase/supabase-js';
 
 const App: React.FC = () => {
+  const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [logs, setLogs] = useState<MealLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [wasLoggedOut, setWasLoggedOut] = useState(false);
 
   useEffect(() => {
+    // Initial Auth check
+    supabase.auth.getSession().then(({ data: { session } }: any) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchSupabaseData(session.user.id);
+      } else {
+        loadLocalData();
+      }
+    });
+
+    // Listen for Auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: any) => {
+      const newUser = session?.user ?? null;
+      setUser(newUser);
+      
+      if (event === 'SIGNED_OUT') {
+        setProfile(null);
+        setLogs([]);
+        localStorage.removeItem('nuvision_profile');
+        localStorage.removeItem('nuvision_logs');
+        setWasLoggedOut(true);
+      } else if (newUser) {
+        fetchSupabaseData(newUser.id);
+        setWasLoggedOut(false);
+      } else if (event === 'INITIAL_SESSION' && !session) {
+        loadLocalData();
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const loadLocalData = () => {
     const savedProfile = localStorage.getItem('nuvision_profile');
     const savedLogs = localStorage.getItem('nuvision_logs');
     const savedTheme = localStorage.getItem('nuvision_theme') as 'light' | 'dark';
@@ -34,7 +71,39 @@ const App: React.FC = () => {
       setTheme(prefersDark ? 'dark' : 'light');
     }
     setIsLoading(false);
-  }, []);
+  };
+
+  const fetchSupabaseData = async (userId: string) => {
+    setIsLoading(true);
+    try {
+      // Fetch Profile
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (profileData) {
+        setProfile(profileData.data);
+      }
+
+      // Fetch Logs
+      const { data: logsData, error: logsError } = await supabase
+        .from('meal_logs')
+        .select('*')
+        .eq('user_id', userId)
+        .order('timestamp', { ascending: false });
+
+      if (logsData) {
+        setLogs(logsData.map((l: any) => l.data));
+      }
+    } catch (err) {
+      console.error('Error fetching Supabase data:', err);
+      loadLocalData();
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
@@ -42,21 +111,57 @@ const App: React.FC = () => {
     localStorage.setItem('nuvision_theme', newTheme);
   };
 
-  const saveProfile = (newProfile: UserProfile) => {
+  const saveProfile = async (newProfile: UserProfile) => {
     setProfile(newProfile);
     localStorage.setItem('nuvision_profile', JSON.stringify(newProfile));
+
+    if (user) {
+      const { error } = await supabase.from('profiles').upsert({
+        user_id: user.id,
+        data: newProfile,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id' });
+      
+      if (error) {
+        console.error('Error saving profile to Supabase:', error);
+      }
+    }
   };
 
-  const addLog = (newLog: MealLog) => {
+  const addLog = async (newLog: MealLog) => {
     const updatedLogs = [newLog, ...logs];
     setLogs(updatedLogs);
     localStorage.setItem('nuvision_logs', JSON.stringify(updatedLogs));
+
+    if (user) {
+      const { error } = await supabase.from('meal_logs').insert({
+        user_id: user.id,
+        id: newLog.id,
+        timestamp: newLog.timestamp,
+        data: newLog,
+      });
+      
+      if (error) {
+        console.error('Error saving log to Supabase:', error);
+        // If it's a UUID error, it's likely because of the ID format
+        if (error.code === '22P02') {
+          console.error('Invalid UUID format for log ID');
+        }
+      }
+    }
   };
 
-  const deleteLog = (id: string) => {
+  const deleteLog = async (id: string) => {
     const updatedLogs = logs.filter(log => log.id !== id);
     setLogs(updatedLogs);
     localStorage.setItem('nuvision_logs', JSON.stringify(updatedLogs));
+
+    if (user) {
+      const { error } = await supabase.from('meal_logs').delete().eq('id', id).eq('user_id', user.id);
+      if (error) {
+        console.error('Error deleting log from Supabase:', error);
+      }
+    }
   };
 
   if (isLoading) {
@@ -70,11 +175,11 @@ const App: React.FC = () => {
   return (
     <Router>
       <div className={`min-h-screen flex flex-col pb-20 md:pb-0 transition-colors duration-300 ${!profile ? 'bg-white' : (theme === 'dark' ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-900')}`}>
-        {profile && <Header theme={theme} onToggleTheme={toggleTheme} />}
+        {profile && <Header theme={theme} onToggleTheme={toggleTheme} user={user} />}
         <main className={`flex-1 container mx-auto px-4 max-w-2xl ${profile ? 'py-6' : 'py-0'}`}>
           <Routes>
             {!profile ? (
-              <Route path="*" element={<Onboarding onComplete={saveProfile} theme={theme} />} />
+              <Route path="*" element={<Onboarding onComplete={saveProfile} theme={theme} initialLoginMode={wasLoggedOut} user={user} />} />
             ) : (
               <>
                 <Route path="/" element={<Dashboard profile={profile} logs={logs} onDeleteLog={deleteLog} theme={theme} />} />

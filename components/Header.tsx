@@ -1,13 +1,19 @@
 
 import React from 'react';
-import { Zap, Moon, Sun } from 'lucide-react';
+import { Zap, Moon, Sun, LogOut } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 interface HeaderProps {
   theme?: 'light' | 'dark';
   onToggleTheme?: () => void;
+  user?: any;
 }
 
-const Header: React.FC<HeaderProps> = ({ theme, onToggleTheme }) => {
+const Header: React.FC<HeaderProps> = ({ theme, onToggleTheme, user }) => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
+
   return (
     <header className={`border-b sticky top-0 z-50 transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-900/80 backdrop-blur-md border-slate-800' : 'bg-white border-slate-200'}`}>
       <div className="container mx-auto px-4 h-16 flex items-center justify-between max-w-4xl">
@@ -19,6 +25,15 @@ const Header: React.FC<HeaderProps> = ({ theme, onToggleTheme }) => {
         </div>
         
         <div className="flex items-center gap-3">
+          {user && (
+            <button 
+              onClick={handleLogout}
+              className={`p-2 rounded-xl transition-colors ${theme === 'dark' ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'}`}
+              title="Log Out"
+            >
+              <LogOut size={20} />
+            </button>
+          )}
           {onToggleTheme && (
             <button 
               onClick={onToggleTheme}
