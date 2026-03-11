@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { UserProfile, MealLog } from './types';
+import { UserProfile, MealLog, WeightLog } from './types';
 import Dashboard from './views/Dashboard';
 import Scanner from './views/Scanner';
 import Coach from './views/Coach';
 import Profile from './views/Profile';
+import WeightTracker from './views/WeightTracker';
 import Onboarding from './views/Onboarding';
 import Header from './components/Header';
 import Navbar from './components/Navbar';
@@ -16,6 +17,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [logs, setLogs] = useState<MealLog[]>([]);
+  const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [wasLoggedOut, setWasLoggedOut] = useState(false);
@@ -39,8 +41,10 @@ const App: React.FC = () => {
       if (event === 'SIGNED_OUT') {
         setProfile(null);
         setLogs([]);
+        setWeightLogs([]);
         localStorage.removeItem('nuvision_profile');
         localStorage.removeItem('nuvision_logs');
+        localStorage.removeItem('nuvision_weight_logs');
         setWasLoggedOut(true);
       } else if (newUser) {
         fetchSupabaseData(newUser.id);
@@ -56,6 +60,7 @@ const App: React.FC = () => {
   const loadLocalData = () => {
     const savedProfile = localStorage.getItem('nuvision_profile');
     const savedLogs = localStorage.getItem('nuvision_logs');
+    const savedWeightLogs = localStorage.getItem('nuvision_weight_logs');
     const savedTheme = localStorage.getItem('nuvision_theme') as 'light' | 'dark';
     
     if (savedProfile) {
@@ -63,6 +68,9 @@ const App: React.FC = () => {
     }
     if (savedLogs) {
       setLogs(JSON.parse(savedLogs));
+    }
+    if (savedWeightLogs) {
+      setWeightLogs(JSON.parse(savedWeightLogs));
     }
     if (savedTheme) {
       setTheme(savedTheme);
@@ -96,6 +104,17 @@ const App: React.FC = () => {
 
       if (logsData) {
         setLogs(logsData.map((l: any) => l.data));
+      }
+
+      // Fetch Weight Logs
+      const { data: weightData, error: weightError } = await supabase
+        .from('weight_logs')
+        .select('*')
+        .eq('user_id', userId)
+        .order('timestamp', { ascending: false });
+
+      if (weightData) {
+        setWeightLogs(weightData.map((l: any) => l.data));
       }
     } catch (err) {
       console.error('Error fetching Supabase data:', err);
@@ -164,6 +183,38 @@ const App: React.FC = () => {
     }
   };
 
+  const addWeightLog = async (newLog: WeightLog) => {
+    const updatedLogs = [newLog, ...weightLogs].sort((a, b) => b.timestamp - a.timestamp);
+    setWeightLogs(updatedLogs);
+    localStorage.setItem('nuvision_weight_logs', JSON.stringify(updatedLogs));
+
+    if (user) {
+      const { error } = await supabase.from('weight_logs').insert({
+        user_id: user.id,
+        id: newLog.id,
+        timestamp: newLog.timestamp,
+        data: newLog,
+      });
+      
+      if (error) {
+        console.error('Error saving weight log to Supabase:', error);
+      }
+    }
+  };
+
+  const deleteWeightLog = async (id: string) => {
+    const updatedLogs = weightLogs.filter(log => log.id !== id);
+    setWeightLogs(updatedLogs);
+    localStorage.setItem('nuvision_weight_logs', JSON.stringify(updatedLogs));
+
+    if (user) {
+      const { error } = await supabase.from('weight_logs').delete().eq('id', id).eq('user_id', user.id);
+      if (error) {
+        console.error('Error deleting weight log from Supabase:', error);
+      }
+    }
+  };
+
   if (isLoading) {
     return (
       <div className={`min-h-screen flex items-center justify-center ${theme === 'dark' ? 'bg-slate-950' : 'bg-slate-50'}`}>
@@ -184,6 +235,7 @@ const App: React.FC = () => {
               <>
                 <Route path="/" element={<Dashboard profile={profile} logs={logs} onDeleteLog={deleteLog} theme={theme} />} />
                 <Route path="/scanner" element={<Scanner profile={profile} onLog={addLog} theme={theme} />} />
+                <Route path="/weight" element={<WeightTracker profile={profile} weightLogs={weightLogs} onAddLog={addWeightLog} onDeleteLog={deleteWeightLog} theme={theme} />} />
                 <Route path="/coach" element={<Coach profile={profile} logs={logs} theme={theme} />} />
                 <Route path="/profile" element={<Profile profile={profile} onUpdate={saveProfile} theme={theme} />} />
                 <Route path="*" element={<Navigate to="/" />} />

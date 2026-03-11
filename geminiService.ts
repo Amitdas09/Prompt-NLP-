@@ -1,8 +1,22 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { UserProfile, FoodAnalysisResult, LabelAnalysisResult } from "./types";
+import { UserProfile, FoodAnalysisResult, LabelAnalysisResult, WeightLog, WeightAnalysis } from "./types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+const WEIGHT_ANALYSIS_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    onTrack: { type: Type.BOOLEAN },
+    status: { type: Type.STRING, description: "e.g. 'Losing weight too fast', 'Steady progress', 'Stalled'" },
+    daysLogged: { type: Type.NUMBER },
+    weightChange: { type: Type.NUMBER, description: "Total weight change in kg" },
+    bmiChange: { type: Type.NUMBER, description: "Total BMI change" },
+    tips: { type: Type.ARRAY, items: { type: Type.STRING } },
+    summary: { type: Type.STRING, description: "A encouraging summary of the progress" }
+  },
+  required: ["onTrack", "status", "daysLogged", "weightChange", "bmiChange", "tips", "summary"]
+};
 
 const FOOD_SCHEMA = {
   type: Type.OBJECT,
@@ -109,9 +123,28 @@ export async function getCoachInsights(history: any[], profile: UserProfile): Pr
   Keep it under 150 words and use Markdown formatting.`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
+    model: 'gemini-3.1-pro-preview',
     contents: prompt
   });
 
   return response.text || "No insights available yet. Keep logging your meals!";
+}
+
+export async function analyzeWeightProgress(logs: WeightLog[], profile: UserProfile): Promise<WeightAnalysis> {
+  const prompt = `As a fitness expert, analyze this user's weight logs: ${JSON.stringify(logs)}.
+  User Profile: ${JSON.stringify(profile)}.
+  Calculate the progress from the first log to the latest.
+  Determine if they are on track for their goal: ${profile.goal}.
+  Provide specific tips and a summary.`;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: WEIGHT_ANALYSIS_SCHEMA
+    }
+  });
+
+  return JSON.parse(response.text || '{}');
 }

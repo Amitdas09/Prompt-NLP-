@@ -65,3 +65,20 @@ export interface MealLog {
   data: FoodAnalysisResult;
   imageUrl?: string;
 }
+
+export interface WeightLog {
+  id: string;
+  timestamp: number;
+  weight: number;
+  bmi: number;
+}
+
+export interface WeightAnalysis {
+  onTrack: boolean;
+  status: string;
+  daysLogged: number;
+  weightChange: number;
+  bmiChange: number;
+  tips: string[];
+  summary: string;
+}
