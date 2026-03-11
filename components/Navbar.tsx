@@ -9,7 +9,7 @@ interface NavbarProps {
 
 const MobileNavbar: React.FC<NavbarProps> = ({ theme }) => {
   return (
-    <nav className={`fixed bottom-0 left-0 right-0 border-t flex justify-around items-center h-16 z-50 sm:px-10 transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+    <nav className={`fixed bottom-0 left-0 right-0 border-t flex justify-around items-center h-16 pb-[env(safe-area-inset-bottom,0px)] box-content z-50 sm:px-10 transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
       {NAV_ITEMS.map((item) => (
         <NavLink
           key={item.id}

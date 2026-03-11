@@ -15,8 +15,8 @@ const Header: React.FC<HeaderProps> = ({ theme, onToggleTheme, user }) => {
   };
 
   return (
-    <header className={`border-b sticky top-0 z-50 transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-900/80 backdrop-blur-md border-slate-800' : 'bg-white border-slate-200'}`}>
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between max-w-4xl">
+    <header className={`border-b sticky top-0 z-50 transition-colors duration-300 pt-[env(safe-area-inset-top,0px)] ${theme === 'dark' ? 'bg-slate-900/80 backdrop-blur-md border-slate-800' : 'bg-white border-slate-200'}`}>
+      <div className="container mx-auto px-4 h-20 flex items-center justify-between max-w-4xl">
         <div className="flex items-center gap-2">
           <div className="bg-emerald-600 p-1.5 rounded-lg text-white">
             <Zap size={20} fill="currentColor" />
