@@ -130,6 +130,23 @@ export async function getCoachInsights(history: any[], profile: UserProfile): Pr
   return response.text || "No insights available yet. Keep logging your meals!";
 }
 
+export async function analyzeDailyIntake(dailyLogs: any[], profile: UserProfile): Promise<string> {
+  const totalCalories = dailyLogs.reduce((sum, log) => sum + log.data.calories, 0);
+  const prompt = `Analyze this user's daily food intake for today: ${JSON.stringify(dailyLogs)}.
+  Total Calories: ${totalCalories} kcal.
+  Target Calories: ${profile.dailyCalorieTarget} kcal.
+  Goal: ${profile.goal}.
+  
+  Provide a brief analysis (2-3 sentences) on whether this intake is good for their goal and give 1-2 specific suggestions for improvement or maintenance. Keep it concise and encouraging.`;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: prompt
+  });
+
+  return response.text || "Keep logging to get personalized feedback!";
+}
+
 export async function analyzeWeightProgress(logs: WeightLog[], profile: UserProfile): Promise<WeightAnalysis> {
   const prompt = `As a fitness expert, analyze this user's weight logs: ${JSON.stringify(logs)}.
   User Profile: ${JSON.stringify(profile)}.

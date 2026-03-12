@@ -18,6 +18,7 @@ const WeightTracker: React.FC<WeightTrackerProps> = ({ profile, weightLogs, onAd
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<WeightAnalysis | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const currentBMI = useMemo(() => {
     if (weightLogs.length === 0) return 0;
@@ -304,12 +305,34 @@ const WeightTracker: React.FC<WeightTrackerProps> = ({ profile, weightLogs, onAd
               </div>
               <div className="flex items-center gap-4">
                 <p className={`text-lg font-black ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{log.weight}kg</p>
-                <button 
-                  onClick={() => onDeleteLog(log.id)}
-                  className="p-2 text-slate-400 hover:text-rose-500 transition-colors"
-                >
-                  <Trash2 size={18} />
-                </button>
+                <div className="flex items-center">
+                  {deletingId === log.id ? (
+                    <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2">
+                      <button
+                        onClick={() => {
+                          onDeleteLog(log.id);
+                          setDeletingId(null);
+                        }}
+                        className="px-3 py-1 bg-rose-500 text-white text-[10px] font-black rounded-full uppercase tracking-widest hover:bg-rose-600 transition-colors"
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        onClick={() => setDeletingId(null)}
+                        className="p-2 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => setDeletingId(log.id)}
+                      className="p-2 text-slate-400 hover:text-rose-500 transition-colors"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}

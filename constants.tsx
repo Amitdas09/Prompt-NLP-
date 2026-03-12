@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Apple, Scan, Target, LineChart, User, Scale } from 'lucide-react';
+import { Apple, Scan, Target, LineChart, User, Scale, History } from 'lucide-react';
 
 export const APP_THEME = {
   primary: 'emerald-600',
@@ -12,6 +12,7 @@ export const APP_THEME = {
 export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Home', icon: <Apple size={24} /> },
   { id: 'scanner', label: 'Scan', icon: <Scan size={24} /> },
+  { id: 'history', label: 'History', icon: <History size={24} /> },
   { id: 'weight', label: 'Weight', icon: <Scale size={24} /> },
   { id: 'coach', label: 'Coach', icon: <LineChart size={24} /> },
   { id: 'profile', label: 'Profile', icon: <User size={24} /> },

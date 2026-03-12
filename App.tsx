@@ -7,6 +7,7 @@ import Scanner from './views/Scanner';
 import Coach from './views/Coach';
 import Profile from './views/Profile';
 import WeightTracker from './views/WeightTracker';
+import MealHistory from './views/MealHistory';
 import Onboarding from './views/Onboarding';
 import Header from './components/Header';
 import Navbar from './components/Navbar';
@@ -235,6 +236,7 @@ const App: React.FC = () => {
               <>
                 <Route path="/" element={<Dashboard profile={profile} logs={logs} onDeleteLog={deleteLog} theme={theme} />} />
                 <Route path="/scanner" element={<Scanner profile={profile} onLog={addLog} theme={theme} />} />
+                <Route path="/history" element={<MealHistory profile={profile} logs={logs} theme={theme} />} />
                 <Route path="/weight" element={<WeightTracker profile={profile} weightLogs={weightLogs} onAddLog={addWeightLog} onDeleteLog={deleteWeightLog} theme={theme} />} />
                 <Route path="/coach" element={<Coach profile={profile} logs={logs} theme={theme} />} />
                 <Route path="/profile" element={<Profile profile={profile} onUpdate={saveProfile} theme={theme} />} />
