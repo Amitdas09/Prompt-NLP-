@@ -1,21 +1,25 @@
 
 import React, { useState, useRef, useMemo } from 'react';
-import { Camera, Upload, RefreshCw, CheckCircle2, AlertTriangle, Search, Info, Zap, ChevronRight, HelpCircle, Image as ImageIcon, History as HistoryIcon } from 'lucide-react';
+import { Camera, Upload, RefreshCw, CheckCircle2, AlertTriangle, Search, Info, Zap, ChevronRight, HelpCircle, Image as ImageIcon, History as HistoryIcon, Loader2 } from 'lucide-react';
 import { analyzeFoodImage, analyzeLabelImage } from '../geminiService';
 import { UserProfile, MealLog, FoodAnalysisResult, LabelAnalysisResult } from '../types';
 import { GOAL_COLORS } from '../constants';
+import { uploadImage } from '../lib/supabase';
+import { User } from '@supabase/supabase-js';
 
 interface ScannerProps {
   profile: UserProfile;
   logs: MealLog[];
   onLog: (log: MealLog) => void;
   theme: 'light' | 'dark';
+  user: User | null;
 }
 
-const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme }) => {
+const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) => {
   const [mode, setMode] = useState<'photo' | 'label'>('photo');
   const [image, setImage] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [foodResult, setFoodResult] = useState<FoodAnalysisResult | null>(null);
   const [labelResult, setLabelResult] = useState<LabelAnalysisResult | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -94,14 +98,25 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme }) => {
     });
   };
 
-  const handleSaveMeal = () => {
+  const handleSaveMeal = async () => {
     if (foodResult && image) {
+      let finalImageUrl = image;
+      
+      if (user) {
+        setIsUploading(true);
+        const uploadedUrl = await uploadImage(image, user.id);
+        if (uploadedUrl) {
+          finalImageUrl = uploadedUrl;
+        }
+        setIsUploading(false);
+      }
+
       onLog({
         id: generateId(),
         timestamp: Date.now(),
         type: 'photo',
         data: foodResult,
-        imageUrl: image
+        imageUrl: finalImageUrl
       });
       reset();
       alert("Meal saved to dashboard!");
@@ -394,10 +409,20 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme }) => {
                     </button>
                     <button 
                       onClick={handleSaveMeal}
-                      className="flex-[2] bg-slate-900 text-white font-black text-sm uppercase tracking-widest py-4 rounded-[2rem] hover:bg-emerald-600 shadow-2xl flex items-center justify-center gap-3 transition-all active:scale-95"
+                      disabled={isUploading}
+                      className={`flex-[2] bg-slate-900 text-white font-black text-sm uppercase tracking-widest py-4 rounded-[2rem] hover:bg-emerald-600 shadow-2xl flex items-center justify-center gap-3 transition-all active:scale-95 ${isUploading ? 'opacity-70 cursor-not-allowed' : ''}`}
                     >
-                      <CheckCircle2 size={20} />
-                      Log This Meal
+                      {isUploading ? (
+                        <>
+                          <Loader2 size={20} className="animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 size={20} />
+                          Log This Meal
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>

@@ -48,13 +48,71 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  const safeSetItem = (key: string, value: string, silent = false) => {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch (e) {
+      if (!silent) console.warn(`LocalStorage error for ${key}:`, e);
+      if (key === 'nuvision_logs') {
+        localStorage.removeItem('nuvision_logs');
+        try {
+          localStorage.setItem(key, value);
+          return true;
+        } catch (e2) {
+          return false;
+        }
+      }
+      return false;
+    }
+  };
+
+  const safeSaveLogs = (logsToSave: MealLog[]) => {
+    // Aggressively prune images for LocalStorage.
+    // We ONLY keep the most recent image if it's a data URL.
+    // If it's a Supabase URL (starts with http), we keep it as it's small.
+    const prunedForStorage = logsToSave.map((log, index) => {
+      const isDataUrl = log.imageUrl && log.imageUrl.startsWith('data:');
+      // Prune all but the very first data URL to save space
+      if (isDataUrl && index > 0) {
+        const { imageUrl, ...rest } = log;
+        return rest as MealLog;
+      }
+      return log;
+    });
+
+    const success = safeSetItem('nuvision_logs', JSON.stringify(prunedForStorage), true);
+    
+    if (!success) {
+      // If it fails, remove ALL data URLs
+      const noDataUrls = logsToSave.map(log => {
+        if (log.imageUrl && log.imageUrl.startsWith('data:')) {
+          const { imageUrl, ...rest } = log;
+          return rest as MealLog;
+        }
+        return log;
+      });
+      
+      const success2 = safeSetItem('nuvision_logs', JSON.stringify(noDataUrls), true);
+      
+      if (!success2) {
+        // Last resort: only store last 5 logs metadata
+        const minimal = noDataUrls.slice(0, 5);
+        safeSetItem('nuvision_logs', JSON.stringify(minimal), false);
+      }
+    }
+  };
+
   useEffect(() => {
     if (logs.length > 0) {
       const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
       const filteredLogs = logs.filter(log => log.timestamp >= oneWeekAgo);
+      
+      // Always save to ensure storage is optimized (pruned of heavy base64)
+      safeSaveLogs(filteredLogs);
+      
       if (filteredLogs.length !== logs.length) {
         setLogs(filteredLogs);
-        localStorage.setItem('nuvision_logs', JSON.stringify(filteredLogs));
       }
     }
   }, [logs]);
@@ -143,11 +201,14 @@ const App: React.FC = () => {
             });
           }
           setLogs(localLogs);
+          safeSaveLogs(localLogs);
         } else {
           setLogs(localLogs); // Fallback to local if cloud fetch failed
+          safeSaveLogs(localLogs);
         }
       } else {
         setLogs(cloudLogs);
+        safeSaveLogs(cloudLogs);
       }
 
       const localWeightStr = localStorage.getItem('nuvision_weight_logs');
@@ -182,12 +243,12 @@ const App: React.FC = () => {
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
     setTheme(newTheme);
-    localStorage.setItem('nuvision_theme', newTheme);
+    safeSetItem('nuvision_theme', newTheme);
   };
 
   const saveProfile = async (newProfile: UserProfile) => {
     setProfile(newProfile);
-    localStorage.setItem('nuvision_profile', JSON.stringify(newProfile));
+    safeSetItem('nuvision_profile', JSON.stringify(newProfile));
 
     if (user) {
       const { error } = await supabase.from('profiles').upsert({
@@ -205,7 +266,7 @@ const App: React.FC = () => {
   const addLog = async (newLog: MealLog) => {
     const updatedLogs = [newLog, ...logs];
     setLogs(updatedLogs);
-    localStorage.setItem('nuvision_logs', JSON.stringify(updatedLogs));
+    safeSaveLogs(updatedLogs);
 
     // Use getUser() directly to ensure we have the most up-to-date auth state
     const { data: { user: currentUser } } = await supabase.auth.getUser();
@@ -238,7 +299,7 @@ const App: React.FC = () => {
   const deleteLog = async (id: string) => {
     const updatedLogs = logs.filter(log => log.id !== id);
     setLogs(updatedLogs);
-    localStorage.setItem('nuvision_logs', JSON.stringify(updatedLogs));
+    safeSaveLogs(updatedLogs);
 
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (currentUser) {
@@ -252,7 +313,7 @@ const App: React.FC = () => {
   const addWeightLog = async (newLog: WeightLog) => {
     const updatedLogs = [newLog, ...weightLogs].sort((a, b) => b.timestamp - a.timestamp);
     setWeightLogs(updatedLogs);
-    localStorage.setItem('nuvision_weight_logs', JSON.stringify(updatedLogs));
+    safeSetItem('nuvision_weight_logs', JSON.stringify(updatedLogs));
 
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (currentUser) {
@@ -276,7 +337,7 @@ const App: React.FC = () => {
   const deleteWeightLog = async (id: string) => {
     const updatedLogs = weightLogs.filter(log => log.id !== id);
     setWeightLogs(updatedLogs);
-    localStorage.setItem('nuvision_weight_logs', JSON.stringify(updatedLogs));
+    safeSetItem('nuvision_weight_logs', JSON.stringify(updatedLogs));
 
     if (user) {
       const { error } = await supabase.from('weight_logs').delete().eq('id', id).eq('user_id', user.id);
@@ -305,7 +366,7 @@ const App: React.FC = () => {
             ) : (
               <>
                 <Route path="/" element={<Dashboard profile={profile} logs={logs} onDeleteLog={deleteLog} theme={theme} />} />
-                <Route path="/scanner" element={<Scanner profile={profile} logs={logs} onLog={addLog} theme={theme} />} />
+                <Route path="/scanner" element={<Scanner profile={profile} logs={logs} onLog={addLog} theme={theme} user={user} />} />
                 <Route path="/history" element={<MealHistory profile={profile} logs={logs} theme={theme} />} />
                 <Route path="/weight" element={<WeightTracker profile={profile} weightLogs={weightLogs} onAddLog={addWeightLog} onDeleteLog={deleteWeightLog} theme={theme} />} />
                 <Route path="/coach" element={<Coach profile={profile} logs={logs} theme={theme} />} />
