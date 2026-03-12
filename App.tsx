@@ -24,16 +24,6 @@ const App: React.FC = () => {
   const [wasLoggedOut, setWasLoggedOut] = useState(false);
 
   useEffect(() => {
-    // Initial Auth check
-    supabase.auth.getSession().then(({ data: { session } }: any) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchSupabaseData(session.user.id);
-      } else {
-        loadLocalData();
-      }
-    });
-
     // Listen for Auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: any) => {
       const newUser = session?.user ?? null;
@@ -65,9 +55,6 @@ const App: React.FC = () => {
       if (filteredLogs.length !== logs.length) {
         setLogs(filteredLogs);
         localStorage.setItem('nuvision_logs', JSON.stringify(filteredLogs));
-        // Note: We don't automatically delete from Supabase here to avoid accidental data loss if the local filter is too aggressive, 
-        // but for this specific request "only past 1 week data should be saved", we should probably sync it.
-        // However, the user request is likely about the UI/Local experience.
       }
     }
   }, [logs]);
@@ -108,6 +95,8 @@ const App: React.FC = () => {
 
       if (profileData) {
         setProfile(profileData.data);
+      } else if (profileError && profileError.code !== 'PGRST116') {
+        console.error('Error fetching profile:', profileError);
       }
 
       // Fetch Logs
@@ -117,8 +106,11 @@ const App: React.FC = () => {
         .eq('user_id', userId)
         .order('timestamp', { ascending: false });
 
+      let cloudLogs: MealLog[] = [];
       if (logsData) {
-        setLogs(logsData.map((l: any) => l.data));
+        cloudLogs = logsData.map((l: any) => l.data);
+      } else if (logsError) {
+        console.error('Error fetching logs:', logsError);
       }
 
       // Fetch Weight Logs
@@ -128,11 +120,59 @@ const App: React.FC = () => {
         .eq('user_id', userId)
         .order('timestamp', { ascending: false });
 
+      let cloudWeightLogs: WeightLog[] = [];
       if (weightData) {
-        setWeightLogs(weightData.map((l: any) => l.data));
+        cloudWeightLogs = weightData.map((l: any) => l.data);
+      } else if (weightError) {
+        console.error('Error fetching weight logs:', weightError);
       }
+
+      // Sync local data to cloud if cloud is empty but local has data
+      const localLogsStr = localStorage.getItem('nuvision_logs');
+      const localLogs: MealLog[] = localLogsStr ? JSON.parse(localLogsStr) : [];
+      
+      if (cloudLogs.length === 0 && localLogs.length > 0) {
+        // Only sync if we didn't get an error fetching cloud logs
+        if (!logsError) {
+          for (const log of localLogs) {
+            await supabase.from('meal_logs').upsert({
+              user_id: userId,
+              id: log.id,
+              timestamp: log.timestamp,
+              data: log,
+            });
+          }
+          setLogs(localLogs);
+        } else {
+          setLogs(localLogs); // Fallback to local if cloud fetch failed
+        }
+      } else {
+        setLogs(cloudLogs);
+      }
+
+      const localWeightStr = localStorage.getItem('nuvision_weight_logs');
+      const localWeight: WeightLog[] = localWeightStr ? JSON.parse(localWeightStr) : [];
+
+      if (cloudWeightLogs.length === 0 && localWeight.length > 0) {
+        if (!weightError) {
+          for (const log of localWeight) {
+            await supabase.from('weight_logs').upsert({
+              user_id: userId,
+              id: log.id,
+              timestamp: log.timestamp,
+              data: log,
+            });
+          }
+          setWeightLogs(localWeight);
+        } else {
+          setWeightLogs(localWeight);
+        }
+      } else {
+        setWeightLogs(cloudWeightLogs);
+      }
+
     } catch (err) {
-      console.error('Error fetching Supabase data:', err);
+      console.error('Error in fetchSupabaseData:', err);
       loadLocalData();
     } finally {
       setIsLoading(false);
@@ -167,20 +207,30 @@ const App: React.FC = () => {
     setLogs(updatedLogs);
     localStorage.setItem('nuvision_logs', JSON.stringify(updatedLogs));
 
-    if (user) {
-      const { error } = await supabase.from('meal_logs').insert({
-        user_id: user.id,
-        id: newLog.id,
-        timestamp: newLog.timestamp,
-        data: newLog,
-      });
-      
-      if (error) {
-        console.error('Error saving log to Supabase:', error);
-        // If it's a UUID error, it's likely because of the ID format
-        if (error.code === '22P02') {
-          console.error('Invalid UUID format for log ID');
+    // Use getUser() directly to ensure we have the most up-to-date auth state
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    
+    if (currentUser) {
+      try {
+        const { error } = await supabase.from('meal_logs').upsert({
+          user_id: currentUser.id,
+          id: newLog.id,
+          timestamp: newLog.timestamp,
+          data: newLog,
+        });
+        
+        if (error) {
+          console.error('Error saving log to Supabase:', error);
+          // Fallback to simple insert if upsert fails
+          await supabase.from('meal_logs').insert({
+            user_id: currentUser.id,
+            id: newLog.id,
+            timestamp: newLog.timestamp,
+            data: newLog,
+          });
         }
+      } catch (err) {
+        console.error('Failed to save log to cloud:', err);
       }
     }
   };
@@ -190,8 +240,9 @@ const App: React.FC = () => {
     setLogs(updatedLogs);
     localStorage.setItem('nuvision_logs', JSON.stringify(updatedLogs));
 
-    if (user) {
-      const { error } = await supabase.from('meal_logs').delete().eq('id', id).eq('user_id', user.id);
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (currentUser) {
+      const { error } = await supabase.from('meal_logs').delete().eq('id', id).eq('user_id', currentUser.id);
       if (error) {
         console.error('Error deleting log from Supabase:', error);
       }
@@ -203,16 +254,21 @@ const App: React.FC = () => {
     setWeightLogs(updatedLogs);
     localStorage.setItem('nuvision_weight_logs', JSON.stringify(updatedLogs));
 
-    if (user) {
-      const { error } = await supabase.from('weight_logs').insert({
-        user_id: user.id,
-        id: newLog.id,
-        timestamp: newLog.timestamp,
-        data: newLog,
-      });
-      
-      if (error) {
-        console.error('Error saving weight log to Supabase:', error);
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (currentUser) {
+      try {
+        const { error } = await supabase.from('weight_logs').upsert({
+          user_id: currentUser.id,
+          id: newLog.id,
+          timestamp: newLog.timestamp,
+          data: newLog,
+        });
+        
+        if (error) {
+          console.error('Error saving weight log to Supabase:', error);
+        }
+      } catch (err) {
+        console.error('Failed to save weight log:', err);
       }
     }
   };
