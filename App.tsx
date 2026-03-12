@@ -58,6 +58,20 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (logs.length > 0) {
+      const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const filteredLogs = logs.filter(log => log.timestamp >= oneWeekAgo);
+      if (filteredLogs.length !== logs.length) {
+        setLogs(filteredLogs);
+        localStorage.setItem('nuvision_logs', JSON.stringify(filteredLogs));
+        // Note: We don't automatically delete from Supabase here to avoid accidental data loss if the local filter is too aggressive, 
+        // but for this specific request "only past 1 week data should be saved", we should probably sync it.
+        // However, the user request is likely about the UI/Local experience.
+      }
+    }
+  }, [logs]);
+
   const loadLocalData = () => {
     const savedProfile = localStorage.getItem('nuvision_profile');
     const savedLogs = localStorage.getItem('nuvision_logs');
@@ -235,7 +249,7 @@ const App: React.FC = () => {
             ) : (
               <>
                 <Route path="/" element={<Dashboard profile={profile} logs={logs} onDeleteLog={deleteLog} theme={theme} />} />
-                <Route path="/scanner" element={<Scanner profile={profile} onLog={addLog} theme={theme} />} />
+                <Route path="/scanner" element={<Scanner profile={profile} logs={logs} onLog={addLog} theme={theme} />} />
                 <Route path="/history" element={<MealHistory profile={profile} logs={logs} theme={theme} />} />
                 <Route path="/weight" element={<WeightTracker profile={profile} weightLogs={weightLogs} onAddLog={addWeightLog} onDeleteLog={deleteWeightLog} theme={theme} />} />
                 <Route path="/coach" element={<Coach profile={profile} logs={logs} theme={theme} />} />

@@ -1,17 +1,18 @@
 
-import React, { useState, useRef } from 'react';
-import { Camera, Upload, RefreshCw, CheckCircle2, AlertTriangle, Search, Info, Zap, ChevronRight, HelpCircle, Image as ImageIcon } from 'lucide-react';
+import React, { useState, useRef, useMemo } from 'react';
+import { Camera, Upload, RefreshCw, CheckCircle2, AlertTriangle, Search, Info, Zap, ChevronRight, HelpCircle, Image as ImageIcon, History as HistoryIcon } from 'lucide-react';
 import { analyzeFoodImage, analyzeLabelImage } from '../geminiService';
 import { UserProfile, MealLog, FoodAnalysisResult, LabelAnalysisResult } from '../types';
 import { GOAL_COLORS } from '../constants';
 
 interface ScannerProps {
   profile: UserProfile;
+  logs: MealLog[];
   onLog: (log: MealLog) => void;
   theme: 'light' | 'dark';
 }
 
-const Scanner: React.FC<ScannerProps> = ({ profile, onLog, theme }) => {
+const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme }) => {
   const [mode, setMode] = useState<'photo' | 'label'>('photo');
   const [image, setImage] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -19,6 +20,7 @@ const Scanner: React.FC<ScannerProps> = ({ profile, onLog, theme }) => {
   const [labelResult, setLabelResult] = useState<LabelAnalysisResult | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [step, setStep] = useState<'upload' | 'result'>('upload');
+  const [showPastMeals, setShowPastMeals] = useState(false);
   
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -111,25 +113,87 @@ const Scanner: React.FC<ScannerProps> = ({ profile, onLog, theme }) => {
     resetState();
   };
 
+  const pastMeals = useMemo(() => {
+    const uniqueMeals: Record<string, MealLog> = {};
+    logs.forEach(log => {
+      if (!uniqueMeals[log.data.itemName]) {
+        uniqueMeals[log.data.itemName] = log;
+      }
+    });
+    return Object.values(uniqueMeals).slice(0, 5);
+  }, [logs]);
+
+  const handleReLog = (meal: MealLog) => {
+    onLog({
+      ...meal,
+      id: generateId(),
+      timestamp: Date.now()
+    });
+    alert(`Logged ${meal.data.itemName} again!`);
+  };
+
   return (
     <div className="space-y-6">
       {/* Mode Selector */}
       {step === 'upload' && (
-        <div className={`flex p-1.5 rounded-[2rem] border-2 shadow-sm transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
-          <button
-            onClick={() => { setMode('photo'); reset(); }}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-[1.5rem] font-black transition-all text-sm uppercase tracking-widest ${mode === 'photo' ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-600/20' : theme === 'dark' ? 'text-slate-500 hover:bg-slate-800' : 'text-slate-400 hover:bg-slate-50'}`}
-          >
-            <Camera size={18} />
-            <span>Photo</span>
-          </button>
-          <button
-            onClick={() => { setMode('label'); reset(); }}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-[1.5rem] font-black transition-all text-sm uppercase tracking-widest ${mode === 'label' ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-600/20' : theme === 'dark' ? 'text-slate-500 hover:bg-slate-800' : 'text-slate-400 hover:bg-slate-50'}`}
-          >
-            <Search size={18} />
-            <span>Label</span>
-          </button>
+        <div className="space-y-4">
+          <div className={`flex p-1.5 rounded-[2rem] border-2 shadow-sm transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+            <button
+              onClick={() => { setMode('photo'); reset(); }}
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-[1.5rem] font-black transition-all text-sm uppercase tracking-widest ${mode === 'photo' ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-600/20' : theme === 'dark' ? 'text-slate-500 hover:bg-slate-800' : 'text-slate-400 hover:bg-slate-50'}`}
+            >
+              <Camera size={18} />
+              <span>Photo</span>
+            </button>
+            <button
+              onClick={() => { setMode('label'); reset(); }}
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-[1.5rem] font-black transition-all text-sm uppercase tracking-widest ${mode === 'label' ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-600/20' : theme === 'dark' ? 'text-slate-500 hover:bg-slate-800' : 'text-slate-400 hover:bg-slate-50'}`}
+            >
+              <Search size={18} />
+              <span>Label</span>
+            </button>
+          </div>
+
+          {pastMeals.length > 0 && mode === 'photo' && (
+            <div className={`p-4 rounded-[2rem] border-2 transition-all ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+              <button 
+                onClick={() => setShowPastMeals(!showPastMeals)}
+                className="w-full flex items-center justify-between text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
+                    <HistoryIcon size={18} />
+                  </div>
+                  <div>
+                    <p className={`text-sm font-black tracking-tight ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Log Past Meal</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Quick re-log from this week</p>
+                  </div>
+                </div>
+                <ChevronRight size={20} className={`text-slate-400 transition-transform ${showPastMeals ? 'rotate-90' : ''}`} />
+              </button>
+
+              {showPastMeals && (
+                <div className="mt-4 space-y-2 animate-in fade-in slide-in-from-top-2">
+                  {pastMeals.map(meal => (
+                    <button
+                      key={meal.id}
+                      onClick={() => handleReLog(meal)}
+                      className={`w-full p-3 rounded-2xl border flex items-center gap-3 transition-all active:scale-[0.98] ${theme === 'dark' ? 'bg-slate-800 border-slate-700 hover:border-emerald-900' : 'bg-slate-50 border-slate-100 hover:border-emerald-200'}`}
+                    >
+                      <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 border border-white dark:border-slate-700">
+                        <img src={meal.imageUrl} alt="" className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-1 text-left">
+                        <p className={`text-xs font-black truncate ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{meal.data.itemName}</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{meal.data.calories} kcal</p>
+                      </div>
+                      <Zap size={14} className="text-emerald-500" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
