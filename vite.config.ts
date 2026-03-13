@@ -10,8 +10,9 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: {
-      // This allows the app to access process.env.API_KEY as required by the SDK
-      'process.env.API_KEY': JSON.stringify(env.API_KEY)
+      // This allows the app to access process.env.GEMINI_API_KEY as required by the SDK
+      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY || env.API_KEY),
+      'process.env.API_KEY': JSON.stringify(env.API_KEY || env.GEMINI_API_KEY)
     }
   };
 });

@@ -2,7 +2,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { UserProfile, FoodAnalysisResult, LabelAnalysisResult, WeightLog, WeightAnalysis } from "./types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.API_KEY });
 
 const WEIGHT_ANALYSIS_SCHEMA = {
   type: Type.OBJECT,

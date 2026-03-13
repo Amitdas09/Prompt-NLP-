@@ -34,8 +34,36 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setImage(reader.result as string);
-        resetState();
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          
+          // Max dimension 1024px for analysis
+          const maxDim = 1024;
+          if (width > height) {
+            if (width > maxDim) {
+              height *= maxDim / width;
+              width = maxDim;
+            }
+          } else {
+            if (height > maxDim) {
+              width *= maxDim / height;
+              height = maxDim;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          const resizedImage = canvas.toDataURL('image/jpeg', 0.8);
+          setImage(resizedImage);
+          resetState();
+        };
+        img.src = reader.result as string;
       };
       reader.readAsDataURL(file);
     }
@@ -64,9 +92,14 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
         setLabelResult(result);
         setStep('result');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Analysis failed", error);
-      alert("Failed to analyze image. Please try again.");
+      const errorMsg = error?.message || "";
+      if (errorMsg.includes("API_KEY_INVALID") || errorMsg.includes("API key not found")) {
+        alert("Gemini API Key is missing or invalid. If you are using Vercel, please ensure GEMINI_API_KEY is set in your environment variables.");
+      } else {
+        alert("Failed to analyze image. This could be due to a network issue or an invalid image format. Please try again.");
+      }
     } finally {
       setIsAnalyzing(false);
     }
@@ -79,9 +112,14 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
       const base64Data = image.split(',')[1];
       const result = await analyzeFoodImage(base64Data, profile, answers);
       setFoodResult(result);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Refinement failed", error);
-      alert("Failed to refine analysis. Please try again.");
+      const errorMsg = error?.message || "";
+      if (errorMsg.includes("API_KEY_INVALID") || errorMsg.includes("API key not found")) {
+        alert("Gemini API Key is missing or invalid. Please check your configuration.");
+      } else {
+        alert("Failed to refine analysis. Please try again.");
+      }
     } finally {
       setIsAnalyzing(false);
     }
