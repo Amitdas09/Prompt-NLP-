@@ -45,6 +45,7 @@ export interface FoodAnalysisResult {
   fiber: number;
   goalScore: 'Good' | 'Moderate' | 'Bad';
   suggestions: string[];
+  analysis?: string;
   honestyScore: number; // 0-100
   needsClarification?: boolean;
   clarificationQuestions?: ClarificationQuestion[];

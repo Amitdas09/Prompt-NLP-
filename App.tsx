@@ -168,7 +168,11 @@ const App: React.FC = () => {
       if (logsData) {
         cloudLogs = logsData.map((l: any) => l.data);
       } else if (logsError) {
-        console.error('Error fetching logs:', logsError);
+        if (logsError.message === 'TypeError: Failed to fetch') {
+          console.warn('Supabase project may be paused or unreachable. Falling back to local data.');
+        } else {
+          console.error('Error fetching logs:', logsError);
+        }
       }
 
       // Fetch Weight Logs
@@ -182,7 +186,11 @@ const App: React.FC = () => {
       if (weightData) {
         cloudWeightLogs = weightData.map((l: any) => l.data);
       } else if (weightError) {
-        console.error('Error fetching weight logs:', weightError);
+        if (weightError.message === 'TypeError: Failed to fetch') {
+          console.warn('Supabase project may be paused or unreachable for weight logs.');
+        } else {
+          console.error('Error fetching weight logs:', weightError);
+        }
       }
 
       // Sync local data to cloud if cloud is empty but local has data
@@ -297,15 +305,28 @@ const App: React.FC = () => {
   };
 
   const deleteLog = async (id: string) => {
-    const updatedLogs = logs.filter(log => log.id !== id);
-    setLogs(updatedLogs);
-    safeSaveLogs(updatedLogs);
+    console.log('deleteLog called with id:', id);
+    let logsAfterDelete: MealLog[] = [];
+    
+    setLogs(prevLogs => {
+      logsAfterDelete = prevLogs.filter(log => log.id !== id);
+      return logsAfterDelete;
+    });
+
+    // Use a small timeout to ensure state has "settled" or just use the calculated value
+    // Actually, we calculated logsAfterDelete above, but setLogs is async.
+    // Let's just calculate it again from the current logs to be safe for storage.
+    const updated = logs.filter(log => log.id !== id);
+    safeSaveLogs(updated);
 
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (currentUser) {
+      console.log('Deleting from Supabase for user:', currentUser.id);
       const { error } = await supabase.from('meal_logs').delete().eq('id', id).eq('user_id', currentUser.id);
       if (error) {
         console.error('Error deleting log from Supabase:', error);
+      } else {
+        console.log('Successfully deleted from Supabase');
       }
     }
   };
@@ -357,9 +378,9 @@ const App: React.FC = () => {
 
   return (
     <Router>
-      <div className={`min-h-screen flex flex-col pb-20 md:pb-0 transition-colors duration-300 ${!profile ? 'bg-white' : (theme === 'dark' ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-900')}`}>
+      <div className={`h-full w-full flex flex-col transition-colors duration-300 ${!profile ? 'bg-white' : (theme === 'dark' ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-900')}`}>
         {profile && <Header theme={theme} onToggleTheme={toggleTheme} user={user} />}
-        <main className={`flex-1 container mx-auto px-4 max-w-2xl ${profile ? 'py-6' : 'py-0'}`}>
+        <main className={`flex-1 overflow-y-auto container mx-auto px-4 max-w-2xl ${profile ? 'py-6 pb-24' : 'py-0'}`}>
           <Routes>
             {!profile ? (
               <Route path="*" element={<Onboarding onComplete={saveProfile} theme={theme} initialLoginMode={wasLoggedOut} user={user} />} />
@@ -367,7 +388,7 @@ const App: React.FC = () => {
               <>
                 <Route path="/" element={<Dashboard profile={profile} logs={logs} onDeleteLog={deleteLog} theme={theme} />} />
                 <Route path="/scanner" element={<Scanner profile={profile} logs={logs} onLog={addLog} theme={theme} user={user} />} />
-                <Route path="/history" element={<MealHistory profile={profile} logs={logs} theme={theme} />} />
+                <Route path="/history" element={<MealHistory profile={profile} logs={logs} onDeleteLog={deleteLog} theme={theme} />} />
                 <Route path="/weight" element={<WeightTracker profile={profile} weightLogs={weightLogs} onAddLog={addWeightLog} onDeleteLog={deleteWeightLog} theme={theme} />} />
                 <Route path="/coach" element={<Coach profile={profile} logs={logs} theme={theme} />} />
                 <Route path="/profile" element={<Profile profile={profile} onUpdate={saveProfile} theme={theme} />} />

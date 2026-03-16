@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useMemo } from 'react';
-import { Camera, Upload, RefreshCw, CheckCircle2, AlertTriangle, Search, Info, Zap, ChevronRight, HelpCircle, Image as ImageIcon, History as HistoryIcon, Loader2 } from 'lucide-react';
+import { Camera, Upload, RefreshCw, CheckCircle2, AlertTriangle, Search, Info, Zap, ChevronRight, HelpCircle, Image as ImageIcon, History as HistoryIcon, Loader2, Calendar } from 'lucide-react';
 import { analyzeFoodImage, analyzeLabelImage } from '../geminiService';
 import { UserProfile, MealLog, FoodAnalysisResult, LabelAnalysisResult } from '../types';
 import { GOAL_COLORS } from '../constants';
@@ -25,6 +25,9 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [step, setStep] = useState<'upload' | 'result'>('upload');
   const [showPastMeals, setShowPastMeals] = useState(false);
+  const [isPastDateMode, setIsPastDateMode] = useState(false);
+  const [customDate, setCustomDate] = useState(new Date().toISOString().split('T')[0]);
+  const [customTime, setCustomTime] = useState(new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }));
   
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -32,40 +35,55 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-          
-          // Max dimension 1024px for analysis
-          const maxDim = 1024;
-          if (width > height) {
-            if (width > maxDim) {
-              height *= maxDim / width;
-              width = maxDim;
-            }
-          } else {
-            if (height > maxDim) {
-              width *= maxDim / height;
-              height = maxDim;
-            }
+      setIsAnalyzing(true); // Show loading while processing image
+      const objectUrl = URL.createObjectURL(file);
+      const img = new Image();
+      
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        // Max dimension 1024px for analysis
+        const maxDim = 1024;
+        if (width > height) {
+          if (width > maxDim) {
+            height *= maxDim / width;
+            width = maxDim;
           }
-          
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-          
-          const resizedImage = canvas.toDataURL('image/jpeg', 0.8);
-          setImage(resizedImage);
-          resetState();
-        };
-        img.src = reader.result as string;
+        } else {
+          if (height > maxDim) {
+            width *= maxDim / height;
+            height = maxDim;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          try {
+            const resizedImage = canvas.toDataURL('image/jpeg', 0.8);
+            setImage(resizedImage);
+            resetState();
+          } catch (err) {
+            console.error("Canvas toDataURL failed", err);
+            alert("Failed to process image. Please try a different photo.");
+          }
+        }
+        URL.revokeObjectURL(objectUrl);
+        setIsAnalyzing(false);
       };
-      reader.readAsDataURL(file);
+
+      img.onerror = () => {
+        console.error("Image load failed");
+        URL.revokeObjectURL(objectUrl);
+        setIsAnalyzing(false);
+        alert("Failed to load image. Please try again.");
+      };
+
+      img.src = objectUrl;
     }
     // Reset value so same file can be selected again
     e.target.value = '';
@@ -151,7 +169,7 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
 
       onLog({
         id: generateId(),
-        timestamp: Date.now(),
+        timestamp: isPastDateMode ? new Date(`${customDate}T${customTime}`).getTime() : Date.now(),
         type: 'photo',
         data: foodResult,
         imageUrl: finalImageUrl
@@ -163,6 +181,7 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
 
   const reset = () => {
     setImage(null);
+    setIsPastDateMode(false);
     resetState();
   };
 
@@ -207,51 +226,102 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
             </button>
           </div>
 
-          {pastMeals.length > 0 && mode === 'photo' && (
+            {pastMeals.length > 0 && mode === 'photo' && (
+              <div className={`p-4 rounded-[2rem] border-2 transition-all ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+                <button 
+                  onClick={() => setShowPastMeals(!showPastMeals)}
+                  className="w-full flex items-center justify-between text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
+                      <HistoryIcon size={18} />
+                    </div>
+                    <div>
+                      <p className={`text-sm font-black tracking-tight ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Quick Re-Log</p>
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Recent meals from this week</p>
+                    </div>
+                  </div>
+                  <ChevronRight size={20} className={`text-slate-400 transition-transform ${showPastMeals ? 'rotate-90' : ''}`} />
+                </button>
+
+                {showPastMeals && (
+                  <div className="mt-4 space-y-2 animate-in fade-in slide-in-from-top-2">
+                    {pastMeals.map(meal => (
+                      <button
+                        key={meal.id}
+                        onClick={() => handleReLog(meal)}
+                        className={`w-full p-3 rounded-2xl border flex items-center gap-3 transition-all active:scale-[0.98] ${theme === 'dark' ? 'bg-slate-800 border-slate-700 hover:border-emerald-900' : 'bg-slate-50 border-slate-100 hover:border-emerald-200'}`}
+                      >
+                        <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 border border-white dark:border-slate-700">
+                          <img src={meal.imageUrl} alt="" className="w-full h-full object-cover" />
+                        </div>
+                        <div className="flex-1 text-left">
+                          <p className={`text-xs font-black truncate ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{meal.data.itemName}</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{meal.data.calories} kcal</p>
+                        </div>
+                        <Zap size={14} className="text-emerald-500" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className={`p-4 rounded-[2rem] border-2 transition-all ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
               <button 
-                onClick={() => setShowPastMeals(!showPastMeals)}
+                onClick={() => setIsPastDateMode(!isPastDateMode)}
                 className="w-full flex items-center justify-between text-left"
               >
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
-                    <HistoryIcon size={18} />
+                  <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
+                    <Calendar size={18} />
                   </div>
                   <div>
-                    <p className={`text-sm font-black tracking-tight ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Log Past Meal</p>
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Quick re-log from this week</p>
+                    <p className={`text-sm font-black tracking-tight ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Log for Past Date</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Select custom date & time</p>
                   </div>
                 </div>
-                <ChevronRight size={20} className={`text-slate-400 transition-transform ${showPastMeals ? 'rotate-90' : ''}`} />
+                <div className={`w-10 h-5 rounded-full transition-colors relative ${isPastDateMode ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                  <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${isPastDateMode ? 'left-6' : 'left-1'}`} />
+                </div>
               </button>
 
-              {showPastMeals && (
-                <div className="mt-4 space-y-2 animate-in fade-in slide-in-from-top-2">
-                  {pastMeals.map(meal => (
-                    <button
-                      key={meal.id}
-                      onClick={() => handleReLog(meal)}
-                      className={`w-full p-3 rounded-2xl border flex items-center gap-3 transition-all active:scale-[0.98] ${theme === 'dark' ? 'bg-slate-800 border-slate-700 hover:border-emerald-900' : 'bg-slate-50 border-slate-100 hover:border-emerald-200'}`}
-                    >
-                      <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 border border-white dark:border-slate-700">
-                        <img src={meal.imageUrl} alt="" className="w-full h-full object-cover" />
-                      </div>
-                      <div className="flex-1 text-left">
-                        <p className={`text-xs font-black truncate ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{meal.data.itemName}</p>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{meal.data.calories} kcal</p>
-                      </div>
-                      <Zap size={14} className="text-emerald-500" />
-                    </button>
-                  ))}
+              {isPastDateMode && (
+                <div className="mt-4 grid grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Date</label>
+                    <input 
+                      type="date" 
+                      value={customDate}
+                      onChange={(e) => setCustomDate(e.target.value)}
+                      className={`w-full px-3 py-2 rounded-xl border-2 text-xs font-bold outline-none transition-all ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white focus:border-emerald-500' : 'bg-slate-50 border-slate-100 text-slate-900 focus:border-emerald-500'}`}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Time</label>
+                    <input 
+                      type="time" 
+                      value={customTime}
+                      onChange={(e) => setCustomTime(e.target.value)}
+                      className={`w-full px-3 py-2 rounded-xl border-2 text-xs font-bold outline-none transition-all ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white focus:border-emerald-500' : 'bg-slate-50 border-slate-100 text-slate-900 focus:border-emerald-500'}`}
+                    />
+                  </div>
                 </div>
               )}
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
 
       {!image ? (
         <div className="space-y-4 animate-in fade-in zoom-in-95 duration-500">
+          {isAnalyzing && (
+            <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center">
+              <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center gap-4">
+                <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
+                <p className="text-sm font-black tracking-tight dark:text-white">Processing Image...</p>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-4">
             <button 
               onClick={() => cameraInputRef.current?.click()}

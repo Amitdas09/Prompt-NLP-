@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Scale, Plus, TrendingUp, TrendingDown, Info, Zap, Calendar, Trash2, ChevronRight, Activity } from 'lucide-react';
+import { Scale, Plus, TrendingUp, TrendingDown, Info, Zap, Calendar, Trash2, ChevronRight, Activity, AlertCircle } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { UserProfile, WeightLog, WeightAnalysis } from '../types';
 import { analyzeWeightProgress } from '../geminiService';
@@ -19,6 +19,7 @@ const WeightTracker: React.FC<WeightTrackerProps> = ({ profile, weightLogs, onAd
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<WeightAnalysis | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const currentBMI = useMemo(() => {
     if (weightLogs.length === 0) return 0;
@@ -60,7 +61,7 @@ const WeightTracker: React.FC<WeightTrackerProps> = ({ profile, weightLogs, onAd
 
   const handleAnalyze = async () => {
     if (weightLogs.length < 2) {
-      alert("Please log at least 2 weight entries to analyze progress.");
+      setError("Please log at least 2 weight entries to analyze progress.");
       return;
     }
     setIsAnalyzing(true);
@@ -69,7 +70,7 @@ const WeightTracker: React.FC<WeightTrackerProps> = ({ profile, weightLogs, onAd
       setAnalysis(result);
     } catch (error) {
       console.error("Analysis failed", error);
-      alert("Failed to analyze progress. Please try again.");
+      setError("Failed to analyze progress. Please try again.");
     } finally {
       setIsAnalyzing(false);
     }
@@ -338,6 +339,27 @@ const WeightTracker: React.FC<WeightTrackerProps> = ({ profile, weightLogs, onAd
           ))}
         </div>
       </div>
+      {/* Error Modal */}
+      {error && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setError(null)} />
+          <div className={`relative w-full max-w-sm p-8 rounded-[2.5rem] shadow-2xl animate-in zoom-in-95 duration-300 ${theme === 'dark' ? 'bg-slate-900 border border-slate-800' : 'bg-white'}`}>
+            <div className="w-16 h-16 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto mb-6">
+              <AlertCircle size={32} />
+            </div>
+            <h3 className={`text-xl font-black text-center mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Notice</h3>
+            <p className={`text-sm font-bold text-center mb-8 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+              {error}
+            </p>
+            <button
+              onClick={() => setError(null)}
+              className="w-full py-4 bg-slate-900 dark:bg-white dark:text-slate-900 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all uppercase tracking-widest text-xs"
+            >
+              Understood
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

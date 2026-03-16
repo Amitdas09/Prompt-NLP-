@@ -33,6 +33,7 @@ const FOOD_SCHEMA = {
       items: { type: Type.STRING },
       description: "Portion correction tips like 'Add 20g protein' or 'Reduce oil'" 
     },
+    analysis: { type: Type.STRING, description: "A brief 1-sentence analysis of why this food is good or bad for the user's goal" },
     honestyScore: { type: Type.NUMBER, description: "Nutrition quality score from 0-100" },
     needsClarification: { type: Type.BOOLEAN, description: "True if specific details like oil usage or precise portion are unclear from photo alone" },
     clarificationQuestions: {
