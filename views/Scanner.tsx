@@ -127,24 +127,38 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
 
   const startCamera = async () => {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      console.warn("Camera API not supported in this browser/context.");
+      console.warn("Camera API not supported in this browser/context. Falling back to native camera input.");
       cameraInputRef.current?.click();
       return;
     }
 
     try {
+      // First attempt: Preferred environment camera with ideal resolution
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' },
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
         audio: false 
       });
       streamRef.current = stream;
       setIsCameraActive(true);
-      // Note: videoRef.current might be null here because state update is async
-      // The useEffect above will handle attaching the stream once mounted
     } catch (err) {
-      console.error("Error accessing camera:", err);
-      // Fallback to file input if getUserMedia fails
-      cameraInputRef.current?.click();
+      console.warn("First camera attempt failed, trying basic constraints:", err);
+      try {
+        // Second attempt: Any camera, no specific resolution
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: true,
+          audio: false 
+        });
+        streamRef.current = stream;
+        setIsCameraActive(true);
+      } catch (err2) {
+        console.error("All camera attempts failed, falling back to native camera input:", err2);
+        // Fallback to file input if getUserMedia fails
+        cameraInputRef.current?.click();
+      }
     }
   };
 
@@ -527,19 +541,27 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
                   muted
                   className="w-full h-full object-cover"
                 />
-                <div className="absolute bottom-8 left-0 right-0 flex justify-center gap-4 px-6">
+                <div className="absolute bottom-8 left-0 right-0 flex flex-col gap-3 px-6">
+                  <div className="flex gap-4">
+                    <button 
+                      onClick={stopCamera}
+                      className="flex-1 bg-white/20 backdrop-blur-md text-white font-black py-4 rounded-2xl border border-white/30 hover:bg-white/30 transition-all active:scale-95"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={capturePhoto}
+                      className="flex-[2] bg-emerald-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-emerald-600/40 flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all active:scale-95"
+                    >
+                      <div className="w-4 h-4 rounded-full bg-white animate-pulse" />
+                      Snap Photo
+                    </button>
+                  </div>
                   <button 
-                    onClick={stopCamera}
-                    className="flex-1 bg-white/20 backdrop-blur-md text-white font-black py-4 rounded-2xl border border-white/30 hover:bg-white/30 transition-all active:scale-95"
+                    onClick={() => { stopCamera(); cameraInputRef.current?.click(); }}
+                    className="w-full bg-slate-900/40 backdrop-blur-md text-white/80 text-[10px] font-black uppercase tracking-widest py-2 rounded-xl border border-white/10 hover:bg-slate-900/60 transition-all"
                   >
-                    Cancel
-                  </button>
-                  <button 
-                    onClick={capturePhoto}
-                    className="flex-[2] bg-emerald-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-emerald-600/40 flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all active:scale-95"
-                  >
-                    <div className="w-4 h-4 rounded-full bg-white animate-pulse" />
-                    Snap Photo
+                    Trouble with live preview? Try Native Camera
                   </button>
                 </div>
               </div>
@@ -568,6 +590,19 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
               <div className="text-left">
                 <p className={`text-lg font-black tracking-tight ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Upload from Device</p>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Choose from Gallery</p>
+              </div>
+            </button>
+
+            <button 
+              onClick={() => cameraInputRef.current?.click()}
+              className={`flex items-center gap-6 p-6 rounded-[2rem] border-2 transition-all group active:scale-[0.98] ${theme === 'dark' ? 'bg-slate-900 border-slate-800 hover:border-amber-900 hover:bg-amber-950/10' : 'bg-white border-slate-100 hover:border-amber-200 hover:bg-amber-50 shadow-lg shadow-slate-200/30'}`}
+            >
+              <div className={`p-4 rounded-2xl transition-transform duration-500 group-hover:-rotate-6 ${theme === 'dark' ? 'bg-slate-800 text-amber-400' : 'bg-amber-50 text-amber-600'}`}>
+                <Camera size={32} />
+              </div>
+              <div className="text-left">
+                <p className={`text-lg font-black tracking-tight ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Native Camera</p>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Use System Camera App</p>
               </div>
             </button>
           </div>
