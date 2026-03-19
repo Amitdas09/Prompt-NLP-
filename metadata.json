@@ -2,6 +2,7 @@
   "name": "Copy of NuVision AI",
   "description": "AI-powered nutrition assistant that analyzes food photos, labels",
   "requestFramePermissions": [
-    "camera"
+    "camera",
+    "microphone"
   ]
 }

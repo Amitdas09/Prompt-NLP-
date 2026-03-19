@@ -28,24 +28,144 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
   const [isPastDateMode, setIsPastDateMode] = useState(false);
   const [customDate, setCustomDate] = useState(new Date().toISOString().split('T')[0]);
   const [customTime, setCustomTime] = useState(new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }));
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(false);
   
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setIsAnalyzing(true); // Show loading while processing image
-      const objectUrl = URL.createObjectURL(file);
-      const img = new Image();
-      
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
+  // State restoration for mobile WebViews that reload after camera use
+  React.useEffect(() => {
+    const restoreState = async () => {
+      try {
+        const savedImage = sessionStorage.getItem('scanner_pending_image');
+        const savedMode = sessionStorage.getItem('scanner_pending_mode') as 'photo' | 'label';
+        const savedStep = sessionStorage.getItem('scanner_pending_step') as 'upload' | 'result';
         
-        // Max dimension 1024px for analysis
-        const maxDim = 1024;
+        if (savedImage) {
+          console.log("Restoring scanner state from session storage...");
+          setIsRestoring(true);
+          setImage(savedImage);
+          if (savedMode) setMode(savedMode);
+          if (savedStep) setStep(savedStep);
+          
+          // If we were in result step, we might need to restore results too
+          const savedFoodResult = sessionStorage.getItem('scanner_pending_food_result');
+          const savedLabelResult = sessionStorage.getItem('scanner_pending_label_result');
+          if (savedFoodResult && savedFoodResult !== 'undefined') {
+            try {
+              setFoodResult(JSON.parse(savedFoodResult));
+            } catch (e) {
+              console.error("Failed to parse saved food result:", e);
+            }
+          }
+          if (savedLabelResult && savedLabelResult !== 'undefined') {
+            try {
+              setLabelResult(JSON.parse(savedLabelResult));
+            } catch (e) {
+              console.error("Failed to parse saved label result:", e);
+            }
+          }
+          
+          setIsRestoring(false);
+        }
+      } catch (err) {
+        console.error("Error during state restoration:", err);
+        setIsRestoring(false);
+      }
+    };
+    restoreState();
+
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (image) {
+      try {
+        sessionStorage.setItem('scanner_pending_image', image);
+        sessionStorage.setItem('scanner_pending_mode', mode);
+        sessionStorage.setItem('scanner_pending_step', step);
+        if (foodResult) sessionStorage.setItem('scanner_pending_food_result', JSON.stringify(foodResult));
+        if (labelResult) sessionStorage.setItem('scanner_pending_label_result', JSON.stringify(labelResult));
+      } catch (e) {
+        console.warn("Failed to save state to session storage (likely size limit):", e);
+      }
+    } else {
+      sessionStorage.removeItem('scanner_pending_image');
+      sessionStorage.removeItem('scanner_pending_mode');
+      sessionStorage.removeItem('scanner_pending_step');
+      sessionStorage.removeItem('scanner_pending_food_result');
+      sessionStorage.removeItem('scanner_pending_label_result');
+    }
+  }, [image, mode, step, foodResult, labelResult]);
+
+  // Handle camera stream attachment when video element mounts
+  React.useEffect(() => {
+    if (isCameraActive && videoRef.current && streamRef.current) {
+      console.log("Attaching stream to video element");
+      videoRef.current.srcObject = streamRef.current;
+      // Explicitly call play to ensure it starts
+      videoRef.current.play().catch(err => {
+        console.error("Error playing video:", err);
+      });
+    }
+  }, [isCameraActive]);
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setIsCameraActive(false);
+  };
+
+  const startCamera = async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      console.warn("Camera API not supported in this browser/context.");
+      cameraInputRef.current?.click();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' },
+        audio: false 
+      });
+      streamRef.current = stream;
+      setIsCameraActive(true);
+      // Note: videoRef.current might be null here because state update is async
+      // The useEffect above will handle attaching the stream once mounted
+    } catch (err) {
+      console.error("Error accessing camera:", err);
+      // Fallback to file input if getUserMedia fails
+      cameraInputRef.current?.click();
+    }
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current) {
+      const video = videoRef.current;
+      const canvas = document.createElement('canvas');
+      
+      // Use video dimensions
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Resize if necessary (using the same logic as handleImageUpload)
+        const maxDim = 800;
+        let width = canvas.width;
+        let height = canvas.height;
+        
         if (width > height) {
           if (width > maxDim) {
             height *= maxDim / width;
@@ -58,33 +178,91 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
           }
         }
         
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          try {
-            const resizedImage = canvas.toDataURL('image/jpeg', 0.8);
-            setImage(resizedImage);
-            resetState();
-          } catch (err) {
-            console.error("Canvas toDataURL failed", err);
-            alert("Failed to process image. Please try a different photo.");
-          }
+        const finalCanvas = document.createElement('canvas');
+        finalCanvas.width = width;
+        finalCanvas.height = height;
+        const finalCtx = finalCanvas.getContext('2d');
+        if (finalCtx) {
+          finalCtx.drawImage(canvas, 0, 0, width, height);
+          const dataUrl = finalCanvas.toDataURL('image/jpeg', 0.8);
+          setImage(dataUrl);
+          resetState();
+          stopCamera();
         }
-        URL.revokeObjectURL(objectUrl);
-        setIsAnalyzing(false);
-      };
-
-      img.onerror = () => {
-        console.error("Image load failed");
-        URL.revokeObjectURL(objectUrl);
-        setIsAnalyzing(false);
-        alert("Failed to load image. Please try again.");
-      };
-
-      img.src = objectUrl;
+      }
     }
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    console.log("Image file selected:", file?.name, file?.type, file?.size);
+    
+    if (file) {
+      setIsAnalyzing(true); // Show loading while processing image
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        
+        img.onload = () => {
+          console.log("Image loaded into memory, dimensions:", img.width, "x", img.height);
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          
+          // Max dimension 800px for better stability in mobile WebViews
+          const maxDim = 800;
+          if (width > height) {
+            if (width > maxDim) {
+              height *= maxDim / width;
+              width = maxDim;
+            }
+          } else {
+            if (height > maxDim) {
+              width *= maxDim / height;
+              height = maxDim;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            try {
+              const resizedImage = canvas.toDataURL('image/jpeg', 0.8);
+              console.log("Image resized and converted to data URL. Length:", resizedImage.length);
+              setImage(resizedImage);
+              resetState();
+            } catch (err) {
+              console.error("Canvas toDataURL failed:", err);
+              alert("Failed to process image. The photo might be too large or your device memory is low.");
+            }
+          }
+          setIsAnalyzing(false);
+        };
+
+        img.onerror = (err) => {
+          console.error("Image object load failed:", err);
+          setIsAnalyzing(false);
+          alert("Failed to load the captured photo. Please try again.");
+        };
+
+        img.src = event.target?.result as string;
+      };
+
+      reader.onerror = (err) => {
+        console.error("FileReader failed:", err);
+        setIsAnalyzing(false);
+        alert("Failed to read the photo file. Please check app permissions.");
+      };
+
+      reader.readAsDataURL(file);
+    } else {
+      console.log("No file was selected or capture was cancelled.");
+      setIsAnalyzing(false);
+    }
+    
     // Reset value so same file can be selected again
     e.target.value = '';
   };
@@ -97,26 +275,32 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
   };
 
   const startAnalysis = async () => {
-    if (!image) return;
+    if (!image) {
+      console.warn("startAnalysis called but no image is present.");
+      return;
+    }
     setIsAnalyzing(true);
+    console.log("Starting analysis for mode:", mode);
     try {
       const base64Data = image.split(',')[1];
       if (mode === 'photo') {
         const result = await analyzeFoodImage(base64Data, profile);
+        console.log("Food analysis successful:", result.itemName);
         setFoodResult(result);
         setStep('result');
       } else {
         const result = await analyzeLabelImage(base64Data);
+        console.log("Label analysis successful");
         setLabelResult(result);
         setStep('result');
       }
     } catch (error: any) {
-      console.error("Analysis failed", error);
+      console.error("Analysis failed:", error);
       const errorMsg = error?.message || "";
       if (errorMsg.includes("API_KEY_INVALID") || errorMsg.includes("API key not found")) {
-        alert("Gemini API Key is missing or invalid. If you are using Vercel, please ensure GEMINI_API_KEY is set in your environment variables.");
+        alert("Gemini API Key is missing or invalid. Please check your configuration.");
       } else {
-        alert("Failed to analyze image. This could be due to a network issue or an invalid image format. Please try again.");
+        alert("Failed to analyze image. Please check your internet connection and try again.");
       }
     } finally {
       setIsAnalyzing(false);
@@ -156,15 +340,26 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
 
   const handleSaveMeal = async () => {
     if (foodResult && image) {
+      console.log("Saving meal:", foodResult.itemName);
       let finalImageUrl = image;
       
       if (user) {
         setIsUploading(true);
-        const uploadedUrl = await uploadImage(image, user.id);
-        if (uploadedUrl) {
-          finalImageUrl = uploadedUrl;
+        try {
+          console.log("Uploading image to cloud storage...");
+          const uploadedUrl = await uploadImage(image, user.id);
+          if (uploadedUrl) {
+            console.log("Image uploaded successfully:", uploadedUrl);
+            finalImageUrl = uploadedUrl;
+          } else {
+            console.warn("Image upload returned null, using local data URL.");
+          }
+        } catch (uploadErr) {
+          console.error("Image upload failed:", uploadErr);
+          // Continue with local image if upload fails
+        } finally {
+          setIsUploading(false);
         }
-        setIsUploading(false);
       }
 
       onLog({
@@ -323,18 +518,45 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
             </div>
           )}
           <div className="grid grid-cols-1 gap-4">
-            <button 
-              onClick={() => cameraInputRef.current?.click()}
-              className={`flex flex-col items-center justify-center gap-4 p-8 rounded-[2.5rem] border-4 border-dashed transition-all group active:scale-[0.98] ${theme === 'dark' ? 'bg-slate-900/50 border-slate-800 hover:border-emerald-800 hover:bg-emerald-950/20' : 'bg-white border-slate-100 hover:border-emerald-300 hover:bg-emerald-50 shadow-xl shadow-slate-200/50'}`}
-            >
-              <div className={`p-5 rounded-3xl transition-transform duration-500 group-hover:scale-110 ${theme === 'dark' ? 'bg-slate-800 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
-                <Camera size={40} />
+            {isCameraActive ? (
+              <div className="relative w-full aspect-square rounded-[2.5rem] overflow-hidden bg-black border-4 border-emerald-500 shadow-2xl animate-in zoom-in-95">
+                <video 
+                  ref={videoRef} 
+                  autoPlay 
+                  playsInline 
+                  muted
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute bottom-8 left-0 right-0 flex justify-center gap-4 px-6">
+                  <button 
+                    onClick={stopCamera}
+                    className="flex-1 bg-white/20 backdrop-blur-md text-white font-black py-4 rounded-2xl border border-white/30 hover:bg-white/30 transition-all active:scale-95"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={capturePhoto}
+                    className="flex-[2] bg-emerald-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-emerald-600/40 flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all active:scale-95"
+                  >
+                    <div className="w-4 h-4 rounded-full bg-white animate-pulse" />
+                    Snap Photo
+                  </button>
+                </div>
               </div>
-              <div className="text-center">
-                <p className={`text-xl font-black tracking-tight ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Take Live Photo</p>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Open Device Camera</p>
-              </div>
-            </button>
+            ) : (
+              <button 
+                onClick={startCamera}
+                className={`flex flex-col items-center justify-center gap-4 p-8 rounded-[2.5rem] border-4 border-dashed transition-all group active:scale-[0.98] ${theme === 'dark' ? 'bg-slate-900/50 border-slate-800 hover:border-emerald-800 hover:bg-emerald-950/20' : 'bg-white border-slate-100 hover:border-emerald-300 hover:bg-emerald-50 shadow-xl shadow-slate-200/50'}`}
+              >
+                <div className={`p-5 rounded-3xl transition-transform duration-500 group-hover:scale-110 ${theme === 'dark' ? 'bg-slate-800 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
+                  <Camera size={40} />
+                </div>
+                <div className="text-center">
+                  <p className={`text-xl font-black tracking-tight ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Take Live Photo</p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Open Device Camera</p>
+                </div>
+              </button>
+            )}
 
             <button 
               onClick={() => galleryInputRef.current?.click()}
@@ -369,9 +591,31 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
           <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] pt-4">
             Supports AI vision for food & labels
           </p>
+          
+          <div className={`mt-8 p-6 rounded-[2rem] border-2 border-dashed transition-all ${theme === 'dark' ? 'bg-slate-900/30 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+            <div className="flex items-start gap-4">
+              <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500 mt-1">
+                <HelpCircle size={20} />
+              </div>
+              <div className="space-y-2">
+                <p className={`text-sm font-black tracking-tight ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Camera Troubleshooting</p>
+                <p className="text-xs font-bold text-slate-500 leading-relaxed">
+                  If your app reloads or fails when taking a live photo, your device might be low on memory. 
+                  <br /><br />
+                  <span className="text-emerald-500">Pro Tip:</span> Try taking the photo with your normal camera app first, then use the <span className="font-black">"Upload from Device"</span> option here.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="space-y-4">
+          {isRestoring && (
+            <div className="flex items-center justify-center gap-2 py-2 animate-pulse">
+              <Loader2 size={14} className="animate-spin text-emerald-500" />
+              <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Restoring Session...</span>
+            </div>
+          )}
           <div className={`relative ${step === 'upload' ? 'aspect-square' : 'h-48'} w-full rounded-[2.5rem] overflow-hidden shadow-2xl border-4 transition-all duration-700 ${theme === 'dark' ? 'border-slate-800' : 'border-white'}`}>
             <img src={image} alt="Preview" className="w-full h-full object-cover" />
             

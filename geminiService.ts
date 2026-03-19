@@ -4,6 +4,18 @@ import { UserProfile, FoodAnalysisResult, LabelAnalysisResult, WeightLog, Weight
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.API_KEY });
 
+const parseGeminiResponse = (text: string | undefined) => {
+  if (!text) return {};
+  try {
+    // Remove potential markdown code blocks
+    const cleanJson = text.replace(/```json\n?|```/g, '').trim();
+    return JSON.parse(cleanJson);
+  } catch (e) {
+    console.error("Failed to parse Gemini JSON response:", e, text);
+    return {};
+  }
+};
+
 const WEIGHT_ANALYSIS_SCHEMA = {
   type: Type.OBJECT,
   properties: {
@@ -91,7 +103,7 @@ export async function analyzeFoodImage(
     }
   });
 
-  return JSON.parse(response.text || '{}');
+  return parseGeminiResponse(response.text);
 }
 
 export async function analyzeLabelImage(base64Image: string): Promise<LabelAnalysisResult> {
@@ -111,7 +123,7 @@ export async function analyzeLabelImage(base64Image: string): Promise<LabelAnaly
     }
   });
 
-  return JSON.parse(response.text || '{}');
+  return parseGeminiResponse(response.text);
 }
 
 export async function getCoachInsights(history: any[], profile: UserProfile): Promise<string> {
@@ -164,5 +176,5 @@ export async function analyzeWeightProgress(logs: WeightLog[], profile: UserProf
     }
   });
 
-  return JSON.parse(response.text || '{}');
+  return parseGeminiResponse(response.text);
 }
