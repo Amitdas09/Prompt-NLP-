@@ -1,0 +1,25 @@
+{
+  "name": "NuVision AI",
+  "short_name": "NuVision",
+  "description": "AI-powered nutrition assistant that analyzes food photos, labels",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#10b981",
+  "icons": [
+    {
+      "src": "https://picsum.photos/seed/nutrition/192/192",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://picsum.photos/seed/nutrition/512/512",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "permissions": [
+    "camera",
+    "microphone"
+  ]
+}

@@ -30,6 +30,7 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
   const [customTime, setCustomTime] = useState(new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }));
   const [isRestoring, setIsRestoring] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -126,9 +127,12 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
   };
 
   const startCamera = async () => {
+    setCameraError(null);
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      console.warn("Camera API not supported in this browser/context. Falling back to native camera input.");
-      cameraInputRef.current?.click();
+      const msg = "Camera API not supported in this browser/context. Falling back to native camera input.";
+      console.warn(msg);
+      setCameraError("Your browser or app doesn't support live camera. Using native camera instead.");
+      setTimeout(() => cameraInputRef.current?.click(), 2000);
       return;
     }
 
@@ -154,10 +158,22 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
         });
         streamRef.current = stream;
         setIsCameraActive(true);
-      } catch (err2) {
-        console.error("All camera attempts failed, falling back to native camera input:", err2);
+      } catch (err2: any) {
+        console.error("All camera attempts failed:", err2);
+        let errorMsg = "Could not access camera.";
+        if (err2.name === 'NotAllowedError' || err2.name === 'PermissionDeniedError') {
+          errorMsg = "Camera permission denied. Please check your app/browser settings.";
+        } else if (err2.name === 'NotFoundError' || err2.name === 'DevicesNotFoundError') {
+          errorMsg = "No camera found on this device.";
+        } else if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+          errorMsg = "Camera requires a secure (HTTPS) connection.";
+        }
+        
+        setCameraError(errorMsg);
         // Fallback to file input if getUserMedia fails
-        cameraInputRef.current?.click();
+        setTimeout(() => {
+          if (!isCameraActive) cameraInputRef.current?.click();
+        }, 3000);
       }
     }
   };
@@ -577,6 +593,13 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
                   <p className={`text-xl font-black tracking-tight ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Take Live Photo</p>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Open Device Camera</p>
                 </div>
+                {cameraError && (
+                  <div className="mt-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 animate-in fade-in slide-in-from-top-1">
+                    <p className="text-[10px] font-black text-red-500 uppercase tracking-wider text-center leading-relaxed">
+                      {cameraError}
+                    </p>
+                  </div>
+                )}
               </button>
             )}
 
@@ -635,9 +658,10 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
               <div className="space-y-2">
                 <p className={`text-sm font-black tracking-tight ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Camera Troubleshooting</p>
                 <p className="text-xs font-bold text-slate-500 leading-relaxed">
-                  If your app reloads or fails when taking a live photo, your device might be low on memory. 
+                  If live photo isn't working, ensure you've granted camera permissions in your device settings. 
+                  Live preview also requires a secure HTTPS connection. 
                   <br /><br />
-                  <span className="text-emerald-500">Pro Tip:</span> Try taking the photo with your normal camera app first, then use the <span className="font-black">"Upload from Device"</span> option here.
+                  <span className="text-amber-500 font-black">Pro Tip:</span> Use the <span className="font-black italic">"Native Camera"</span> option for maximum compatibility with your device.
                 </p>
               </div>
             </div>
