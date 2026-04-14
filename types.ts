@@ -46,7 +46,9 @@ export interface FoodAnalysisResult {
   goalScore: 'Good' | 'Moderate' | 'Bad';
   suggestions: string[];
   analysis?: string;
+  ingredientsSummary?: string;
   honestyScore: number; // 0-100
+  refinementSuggestion?: string;
   needsClarification?: boolean;
   clarificationQuestions?: ClarificationQuestion[];
 }

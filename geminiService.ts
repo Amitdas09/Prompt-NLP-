@@ -46,7 +46,9 @@ const FOOD_SCHEMA = {
       description: "Portion correction tips like 'Add 20g protein' or 'Reduce oil'" 
     },
     analysis: { type: Type.STRING, description: "A brief 1-sentence analysis of why this food is good or bad for the user's goal" },
+    ingredientsSummary: { type: Type.STRING, description: "A brief description of what the food is made of (e.g., 'A bowl of oatmeal with sliced bananas and honey')" },
     honestyScore: { type: Type.NUMBER, description: "Nutrition quality score from 0-100" },
+    refinementSuggestion: { type: Type.STRING, description: "A suggestion to the user on how they can provide more details to get a more accurate result (e.g., 'Tell me if there is butter in the sauce')" },
     needsClarification: { type: Type.BOOLEAN, description: "True if specific details like oil usage or precise portion are unclear from photo alone" },
     clarificationQuestions: {
       type: Type.ARRAY,
@@ -79,14 +81,24 @@ const LABEL_SCHEMA = {
 export async function analyzeFoodImage(
   base64Image: string, 
   profile: UserProfile, 
-  userAnswers?: Record<string, string>
+  userAnswers?: Record<string, string>,
+  initialDescription?: string
 ): Promise<FoodAnalysisResult> {
   let prompt = `Analyze this food photo for a person with the goal: ${profile.goal}. 
   Current weight: ${profile.weight}kg, Height: ${profile.height}cm.
-  Be extremely strict and precise. If you are unsure about ingredients (e.g., hidden oils, portion depth), set needsClarification to true and ask 1-3 targeted questions.`;
+  Be extremely strict and precise. If you are unsure about ingredients (e.g., hidden oils, portion depth), set needsClarification to true and ask 1-3 targeted questions.
+  Always provide a 'refinementSuggestion' that tells the user what specific information could make this analysis more accurate, even if you are fairly confident.
+  
+  CRITICAL: For liquids, bread, or items in containers, you MUST ask about quantity in 'clarificationQuestions'. 
+  Example questions: "How many ml is this drink?", "How many slices of bread?", "How deep is the bowl/container?", "What is the weight in grams?".
+  Provide 3-4 likely options for these questions (e.g., ["250ml", "330ml", "500ml"]).`;
 
-  if (userAnswers) {
-    prompt += `\n\nThe user provided the following additional details: ${JSON.stringify(userAnswers)}. Refine your previous estimation based on this info. Be very accurate.`;
+  if (initialDescription) {
+    prompt += `\n\nThe user provided this description of the food: "${initialDescription}". Use this as the primary context for your analysis.`;
+  }
+
+  if (userAnswers && Object.keys(userAnswers).length > 0) {
+    prompt += `\n\nThe user provided the following additional details to clarify previous questions: ${JSON.stringify(userAnswers)}. Refine your previous estimation based on this info. Be very accurate.`;
   }
 
   const response = await ai.models.generateContent({

@@ -22,6 +22,7 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
   const [isUploading, setIsUploading] = useState(false);
   const [foodResult, setFoodResult] = useState<FoodAnalysisResult | null>(null);
   const [labelResult, setLabelResult] = useState<LabelAnalysisResult | null>(null);
+  const [initialDescription, setInitialDescription] = useState('');
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [step, setStep] = useState<'upload' | 'result'>('upload');
   const [showPastMeals, setShowPastMeals] = useState(false);
@@ -44,6 +45,7 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
         const savedImage = sessionStorage.getItem('scanner_pending_image');
         const savedMode = sessionStorage.getItem('scanner_pending_mode') as 'photo' | 'label';
         const savedStep = sessionStorage.getItem('scanner_pending_step') as 'upload' | 'result';
+        const savedDescription = sessionStorage.getItem('scanner_pending_description');
         
         if (savedImage) {
           console.log("Restoring scanner state from session storage...");
@@ -51,6 +53,7 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
           setImage(savedImage);
           if (savedMode) setMode(savedMode);
           if (savedStep) setStep(savedStep);
+          if (savedDescription) setInitialDescription(savedDescription);
           
           // If we were in result step, we might need to restore results too
           const savedFoodResult = sessionStorage.getItem('scanner_pending_food_result');
@@ -92,6 +95,7 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
         sessionStorage.setItem('scanner_pending_image', image);
         sessionStorage.setItem('scanner_pending_mode', mode);
         sessionStorage.setItem('scanner_pending_step', step);
+        sessionStorage.setItem('scanner_pending_description', initialDescription);
         if (foodResult) sessionStorage.setItem('scanner_pending_food_result', JSON.stringify(foodResult));
         if (labelResult) sessionStorage.setItem('scanner_pending_label_result', JSON.stringify(labelResult));
       } catch (e) {
@@ -101,6 +105,7 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
       sessionStorage.removeItem('scanner_pending_image');
       sessionStorage.removeItem('scanner_pending_mode');
       sessionStorage.removeItem('scanner_pending_step');
+      sessionStorage.removeItem('scanner_pending_description');
       sessionStorage.removeItem('scanner_pending_food_result');
       sessionStorage.removeItem('scanner_pending_label_result');
     }
@@ -300,6 +305,7 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
   const resetState = () => {
     setFoodResult(null);
     setLabelResult(null);
+    setInitialDescription('');
     setAnswers({});
     setStep('upload');
   };
@@ -314,7 +320,7 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
     try {
       const base64Data = image.split(',')[1];
       if (mode === 'photo') {
-        const result = await analyzeFoodImage(base64Data, profile);
+        const result = await analyzeFoodImage(base64Data, profile, undefined, undefined);
         console.log("Food analysis successful:", result.itemName);
         setFoodResult(result);
         setStep('result');
@@ -342,7 +348,7 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
     setIsAnalyzing(true);
     try {
       const base64Data = image.split(',')[1];
-      const result = await analyzeFoodImage(base64Data, profile, answers);
+      const result = await analyzeFoodImage(base64Data, profile, answers, initialDescription);
       setFoodResult(result);
     } catch (error: any) {
       console.error("Refinement failed", error);
@@ -686,13 +692,6 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
                 >
                   <RefreshCw size={28} />
                 </button>
-                <button 
-                  onClick={startAnalysis}
-                  className="bg-emerald-600 px-8 py-4 rounded-[2rem] text-white font-black hover:bg-emerald-700 shadow-2xl flex items-center gap-3 animate-pulse active:scale-95 transform transition-all"
-                >
-                  <Zap size={24} />
-                  Analyze {mode === 'photo' ? 'Food' : 'Label'}
-                </button>
               </div>
             )}
 
@@ -709,6 +708,18 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
               </div>
             )}
           </div>
+
+          {step === 'upload' && image && !isAnalyzing && (
+            <div className="p-6">
+              <button 
+                onClick={startAnalysis}
+                className="w-full bg-emerald-600 py-4 rounded-2xl text-white font-black hover:bg-emerald-700 shadow-xl shadow-emerald-600/20 flex items-center justify-center gap-3 active:scale-[0.98] transition-all"
+              >
+                <Zap size={20} />
+                Analyze {mode === 'photo' ? 'Food' : 'Label'}
+              </button>
+            </div>
+          )}
 
           {step === 'result' && (
             <div className="animate-in slide-in-from-bottom-6 duration-700 space-y-4">
@@ -733,6 +744,15 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
                     </div>
                   </div>
 
+                  {foodResult.ingredientsSummary && (
+                    <div className={`p-4 rounded-2xl border ${theme === 'dark' ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+                      <p className={`text-xs font-bold leading-relaxed ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>
+                        <span className="font-black text-emerald-500 mr-1">Detected:</span>
+                        {foodResult.ingredientsSummary}
+                      </p>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-4 gap-3">
                     {[
                       { label: 'Protein', value: foodResult.protein, color: 'bg-emerald-500' },
@@ -750,18 +770,39 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
                     ))}
                   </div>
 
-                  {foodResult.needsClarification && foodResult.clarificationQuestions && (
+                  {foodResult.refinementSuggestion && (
+                    <div className={`p-5 rounded-3xl border-2 transition-colors ${theme === 'dark' ? 'bg-blue-950/20 border-blue-900/30' : 'bg-blue-50 border-blue-100'}`}>
+                      <p className={`text-xs font-black uppercase mb-2 flex items-center gap-2 tracking-[0.15em] ${theme === 'dark' ? 'text-blue-400' : 'text-blue-800'}`}>
+                        <Info size={16} className="text-blue-500" /> Accuracy Tip
+                      </p>
+                      <p className={`text-sm font-bold leading-relaxed ${theme === 'dark' ? 'text-slate-300' : 'text-blue-900/80'}`}>
+                        {foodResult.refinementSuggestion}
+                      </p>
+                    </div>
+                  )}
+
+                  {(foodResult.needsClarification || true) && (
                     <div className={`p-6 rounded-3xl border-2 border-dashed space-y-5 relative transition-all ${theme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                       <div className="absolute -top-3 left-6 bg-emerald-600 px-3 py-1 rounded-full flex items-center gap-2">
                         <HelpCircle size={12} className="text-white" />
-                        <span className="text-[10px] font-black text-white uppercase tracking-widest">Optional Refinement</span>
+                        <span className="text-[10px] font-black text-white uppercase tracking-widest">Refine Analysis</span>
                       </div>
                       
                       <div className="space-y-4 pt-2">
-                        {foodResult.clarificationQuestions.map((q) => (
+                        <div className="space-y-3">
+                          <p className={`text-xs font-black tracking-tight ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Correct or Add Details</p>
+                          <textarea
+                            value={initialDescription}
+                            onChange={(e) => setInitialDescription(e.target.value)}
+                            placeholder="If the scan is wrong, tell me what it is here..."
+                            className={`w-full px-4 py-3 rounded-xl border-2 text-sm font-bold outline-none transition-all min-h-[80px] resize-none ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-white focus:border-emerald-600' : 'bg-white border-slate-100 text-slate-900 focus:border-emerald-500'}`}
+                          />
+                        </div>
+
+                        {foodResult.clarificationQuestions && foodResult.clarificationQuestions.map((q) => (
                           <div key={q.id} className="space-y-3">
                             <p className={`text-xs font-black tracking-tight ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>{q.question}</p>
-                            {q.options ? (
+                            {q.options && (
                               <div className="flex flex-wrap gap-2">
                                 {q.options.map(opt => (
                                   <button
@@ -773,27 +814,25 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
                                   </button>
                                 ))}
                               </div>
-                            ) : (
-                              <input
-                                type="text"
-                                placeholder="Details..."
-                                className={`w-full px-4 py-3 rounded-xl border-2 text-sm font-bold outline-none transition-all ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-white focus:border-emerald-600' : 'bg-white border-slate-100 text-slate-900 focus:border-emerald-500'}`}
-                                onChange={(e) => setAnswers({...answers, [q.id]: e.target.value})}
-                              />
                             )}
+                            <input
+                              type="text"
+                              placeholder={q.options ? "Or enter custom amount..." : "Details..."}
+                              className={`w-full px-4 py-3 rounded-xl border-2 text-sm font-bold outline-none transition-all ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-white focus:border-emerald-600' : 'bg-white border-slate-100 text-slate-900 focus:border-emerald-500'}`}
+                              value={answers[q.id] || ''}
+                              onChange={(e) => setAnswers({...answers, [q.id]: e.target.value})}
+                            />
                           </div>
                         ))}
                       </div>
                       
-                      {Object.keys(answers).length > 0 && (
-                        <button 
-                          onClick={refineAnalysis}
-                          className="w-full bg-emerald-600 text-white text-xs font-black py-3 rounded-[1.25rem] hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-xl shadow-emerald-600/20"
-                        >
-                          <RefreshCw size={14} className={isAnalyzing ? 'animate-spin' : ''} />
-                          Re-Analyze with Details
-                        </button>
-                      )}
+                      <button 
+                        onClick={refineAnalysis}
+                        className="w-full bg-emerald-600 text-white text-xs font-black py-3 rounded-[1.25rem] hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-xl shadow-emerald-600/20"
+                      >
+                        <RefreshCw size={14} className={isAnalyzing ? 'animate-spin' : ''} />
+                        Re-Analyze with Details
+                      </button>
                     </div>
                   )}
 
