@@ -1,18 +1,26 @@
 import { createClient } from '@supabase/supabase-js';
 
 const getSupabaseConfig = () => {
-  const url = import.meta.env.VITE_SUPABASE_URL;
+  const url = import.meta.env.VITE_SUPABASE_URL?.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
   const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
   
   if (!url || !key) {
     if (process.env.NODE_ENV !== 'production') {
-      console.warn('Supabase environment variables VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are missing. Authentication and cloud storage will be disabled.');
+      console.warn('Supabase environment variables VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are missing.');
     }
     return null;
   }
   
+  console.log('Initializing Supabase with URL:', url);
   try {
-    return createClient(url, key);
+    const client = createClient(url, key, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+      }
+    });
+    return client;
   } catch (err) {
     console.error('Failed to initialize Supabase client:', err);
     return null;

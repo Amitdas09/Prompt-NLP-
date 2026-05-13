@@ -34,24 +34,36 @@ const App: React.FC = () => {
 
     // Listen for Auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: any) => {
+      console.log('Supabase Auth Event:', event, session?.user?.email);
       const newUser = session?.user ?? null;
-      setUser(newUser);
       
       if (event === 'SIGNED_OUT') {
-        setProfile(null);
-        setLogs([]);
-        setWeightLogs([]);
-        localStorage.removeItem('nuvision_profile');
-        localStorage.removeItem('nuvision_logs');
-        localStorage.removeItem('nuvision_weight_logs');
-        setWasLoggedOut(true);
+        processSignOut();
       } else if (newUser) {
-        fetchSupabaseData(newUser.id);
+        setUser(newUser);
         setWasLoggedOut(false);
+        fetchSupabaseData(newUser.id);
       } else if (event === 'INITIAL_SESSION' && !session) {
+        setUser(null);
         loadLocalData();
+      } else if (event === 'SIGNED_IN' && session) {
+        // Double check signed in
+        setUser(session.user);
+        fetchSupabaseData(session.user.id);
       }
     });
+
+    const processSignOut = () => {
+      setUser(null);
+      setProfile(null);
+      setLogs([]);
+      setWeightLogs([]);
+      localStorage.removeItem('nuvision_profile');
+      localStorage.removeItem('nuvision_logs');
+      localStorage.removeItem('nuvision_weight_logs');
+      setWasLoggedOut(true);
+      setIsLoading(false);
+    };
 
     return () => {
       if (subscription) subscription.unsubscribe();
@@ -158,24 +170,33 @@ const App: React.FC = () => {
       loadLocalData();
       return;
     }
-    setIsLoading(true);
+    
+    // We only show full-screen loading if we don't have a profile OR logs yet
+    // This makes login feel snappier if they already have local data
+    if (!profile && logs.length === 0) {
+      setIsLoading(true);
+    }
     setFetchError(null);
+
+    // Safety timeout to prevent getting stuck on loading screen
+    const loadingTimeout = setTimeout(() => {
+      console.warn('Supabase data fetch timed out. Falling back to local data.');
+      setFetchError('Cloud sync is taking too long. Working in offline mode.');
+      setIsLoading(false);
+      loadLocalData();
+    }, 8000); // 8 seconds safety margin
+
     try {
       // Fetch Profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('user_id', userId)
-        .single();
+        .eq('user_id', userId);
 
-      if (profileData) {
-        setProfile(profileData.data);
-      } else if (profileError && profileError.code !== 'PGRST116') {
-        if (profileError.message?.includes('Failed to fetch')) {
-          setFetchError('Connection lost: Supabase server unreachable.');
-        } else {
-          console.error('Error fetching profile:', profileError);
-        }
+      if (profileData && profileData.length > 0) {
+        setProfile(profileData[0].data);
+      } else if (profileError) {
+        console.error('Error fetching profile:', profileError);
       }
 
       // Fetch Logs
@@ -188,13 +209,8 @@ const App: React.FC = () => {
       let cloudLogs: MealLog[] = [];
       if (logsData) {
         cloudLogs = logsData.map((l: any) => l.data);
-      } else if (logsError) {
-        if (logsError.message?.includes('Failed to fetch')) {
-          setFetchError('Connection lost: Supabase server unreachable.');
-          console.warn('Supabase project may be paused or unreachable. Falling back to local data.');
-        } else {
-          console.error('Error fetching logs:', logsError);
-        }
+      } else if (logsError && logsError.message?.includes('Failed to fetch')) {
+        setFetchError('Connection lost: Supabase server unreachable.');
       }
 
       // Fetch Weight Logs
@@ -207,18 +223,6 @@ const App: React.FC = () => {
       let cloudWeightLogs: WeightLog[] = [];
       if (weightData) {
         cloudWeightLogs = weightData.map((l: any) => l.data);
-      } else if (weightError) {
-        if (weightError.message?.includes('Failed to fetch')) {
-          setFetchError('Connection lost: Supabase server unreachable.');
-        } else {
-          console.error('Error fetching weight logs:', weightError);
-        }
-      }
-
-      // If we had a fetch error, we stop here and let local data be used
-      if (logsError?.message?.includes('Failed to fetch') || weightError?.message?.includes('Failed to fetch')) {
-        loadLocalData();
-        return;
       }
 
       // Sync local data to cloud if cloud is empty but local has data
@@ -228,18 +232,21 @@ const App: React.FC = () => {
       if (cloudLogs.length === 0 && localLogs.length > 0) {
         // Only sync if we didn't get an error fetching cloud logs
         if (!logsError) {
-          for (const log of localLogs) {
-            await supabase.from('meal_logs').upsert({
-              user_id: userId,
-              id: log.id,
-              timestamp: log.timestamp,
-              data: log,
-            });
-          }
+          // Sync in background, don't await the whole loop for UI
+          (async () => {
+             for (const log of localLogs) {
+              await supabase.from('meal_logs').upsert({
+                user_id: userId,
+                id: log.id,
+                timestamp: log.timestamp,
+                data: log,
+              });
+            }
+          })();
           setLogs(localLogs);
           safeSaveLogs(localLogs);
         } else {
-          setLogs(localLogs); // Fallback to local if cloud fetch failed
+          setLogs(localLogs);
           safeSaveLogs(localLogs);
         }
       } else {
@@ -251,24 +258,14 @@ const App: React.FC = () => {
       const localWeight: WeightLog[] = localWeightStr ? JSON.parse(localWeightStr) : [];
 
       if (cloudWeightLogs.length === 0 && localWeight.length > 0) {
-        if (!weightError) {
-          for (const log of localWeight) {
-            await supabase.from('weight_logs').upsert({
-              user_id: userId,
-              id: log.id,
-              timestamp: log.timestamp,
-              data: log,
-            });
-          }
-          setWeightLogs(localWeight);
-        } else {
-          setWeightLogs(localWeight);
-        }
+        setWeightLogs(localWeight);
       } else {
         setWeightLogs(cloudWeightLogs);
       }
 
+      clearTimeout(loadingTimeout);
     } catch (err) {
+      clearTimeout(loadingTimeout);
       console.error('Error in fetchSupabaseData:', err);
       loadLocalData();
     } finally {

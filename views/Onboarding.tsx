@@ -29,38 +29,60 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, theme, initialLogin
     activityLevel: ActivityLevel.MODERATE
   });
 
+  // If we are authenticated but still "loading" auth, stop it
+  React.useEffect(() => {
+    if (user && isAuthLoading) {
+      setIsAuthLoading(false);
+      setAuthError(null);
+    }
+  }, [user, isAuthLoading]);
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
     setIsAuthLoading(true);
 
+    // Set a timeout to prevent infinite "Processing..." state
+    const timeoutId = setTimeout(() => {
+      setIsAuthLoading(loading => {
+        if (loading) {
+          setAuthError("Authentication is taking longer than expected. If this is your first time, the server might be waking up (can take up to 60s).");
+          return false;
+        }
+        return loading;
+      });
+    }, 45000); // 45 seconds for project wake-up
+
     try {
       if (!supabase) {
+        clearTimeout(timeoutId);
         throw new Error('Authentication service is currently unavailable. Please try again later or continue as guest.');
       }
       
-      if (isLoginMode) {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) {
-          if (error.message?.includes('Failed to fetch')) {
-            throw new Error('Network error: Could not reach authentication server. Please check your internet or Supabase project status.');
-          }
-          if (error.message?.includes('Invalid login credentials')) {
-            throw new Error('Account does not exist or incorrect password. Please check your details or sign up.');
-          }
-          throw error;
+      const { data, error } = isLoginMode 
+        ? await supabase.auth.signInWithPassword({ email, password })
+        : await supabase.auth.signUp({ email, password });
+
+      clearTimeout(timeoutId);
+      
+      if (error) {
+        if (error.message?.includes('Failed to fetch')) {
+          throw new Error('Network error: Could not reach authentication server. Please check your internet.');
         }
-      } else {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) {
-          if (error.message?.includes('Failed to fetch')) {
-            throw new Error('Network error: Could not reach authentication server. Please try again later.');
-          }
-          throw error;
+        if (error.message?.includes('Invalid login credentials')) {
+          throw new Error('Incorrect email or password. Please try again.');
         }
-        alert('Check your email for the confirmation link!');
+        if (error.status === 400 && error.message?.includes('Email not confirmed')) {
+          throw new Error('Please check your email and confirm your account before logging in.');
+        }
+        throw error;
+      }
+
+      if (!isLoginMode && data?.user && !data.session) {
+        alert('Success! Please check your email for the confirmation link to activate your account.');
       }
     } catch (err: any) {
+      clearTimeout(timeoutId);
       setAuthError(err.message);
     } finally {
       setIsAuthLoading(false);
@@ -168,32 +190,79 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, theme, initialLogin
                     </button>
                   </div>
                 </div>
-                {authError && <p className="text-red-500 text-[10px] font-bold px-1">{authError}</p>}
+                {authError && (
+                  <div className="bg-red-50 p-3 rounded-xl border border-red-100">
+                    <p className="text-red-600 text-[10px] font-bold">{authError}</p>
+                    <div className="flex items-center gap-3 mt-2">
+                      <p className="text-slate-400 text-[9px] italic flex-1">Tip: You can always "Continue as Guest" below if login is failing.</p>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          localStorage.clear();
+                          window.location.reload();
+                        }}
+                        className="text-[9px] font-black text-red-400 uppercase tracking-widest hover:text-red-600 whitespace-nowrap"
+                      >
+                        Reset App
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <button
                   type="submit"
                   disabled={isAuthLoading}
                   className="w-full bg-emerald-600 text-white font-black py-4 rounded-2xl hover:bg-emerald-700 transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  {isAuthLoading ? 'Processing...' : (isLoginMode ? 'Log In' : 'Sign Up')}
-                  <LogIn size={18} />
+                  {isAuthLoading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      Processing...
+                    </div>
+                  ) : (
+                    <>
+                      {isLoginMode ? 'Log In' : 'Sign Up'}
+                      <LogIn size={18} />
+                    </>
+                  )}
                 </button>
               </form>
 
-              <div className="relative">
+              <div className="relative pt-2">
                 <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-100"></span></div>
-                <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest"><span className="bg-white px-2 text-slate-300">Or continue as guest</span></div>
+                <div className="relative flex justify-center text-[10px] uppercase font-black tracking-widest"><span className="bg-white px-4 text-slate-300">Or use without account</span></div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const element = document.getElementById('profile-form-start');
+                  element?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="w-full bg-slate-50 text-slate-500 font-bold py-3 rounded-2xl border-2 border-slate-100 hover:bg-slate-100 transition-all flex items-center justify-center gap-2"
+              >
+                Continue as Guest
+                <ChevronRight size={16} />
+              </button>
             </>
           ) : (
             <div className="text-center py-2">
-              <p className="text-emerald-600 font-black text-sm uppercase tracking-widest">Authenticated as</p>
-              <p className="text-slate-900 font-bold truncate">{user.email}</p>
+              <div className="flex items-center justify-center gap-2 mb-1">
+                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                <p className="text-emerald-600 font-black text-[10px] uppercase tracking-widest">Authenticated</p>
+              </div>
+              <p className="text-slate-900 font-bold truncate px-4">{user.email}</p>
+              <button 
+                onClick={() => supabase?.auth.signOut()}
+                className="text-[10px] text-slate-400 hover:text-red-500 font-bold uppercase tracking-widest mt-2 underline"
+              >
+                Sign Out / Switch Account
+              </button>
               <div className="h-px bg-slate-100 my-4"></div>
-              <p className="text-slate-500 text-xs font-medium">Please complete your profile details below to continue.</p>
+              <p className="text-slate-500 text-xs font-medium px-4">Great! Now just complete your profile details below to get started.</p>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6" id="profile-form-start">
             <div className="space-y-1.5">
               <label className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">Full Name</label>
               <input
