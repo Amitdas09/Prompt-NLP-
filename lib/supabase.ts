@@ -1,19 +1,42 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://tqiezhhegirbvobokwfh.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_3pCuIR02kaHnqWR8d8Em_Q_IfVuhn6W';
+const getSupabaseConfig = () => {
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  
+  if (!url || !key) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('Supabase environment variables VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are missing. Authentication and cloud storage will be disabled.');
+    }
+    return null;
+  }
+  
+  try {
+    return createClient(url, key);
+  } catch (err) {
+    console.error('Failed to initialize Supabase client:', err);
+    return null;
+  }
+};
 
-if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-  console.info('Using fallback Supabase credentials. For production, set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment.');
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = getSupabaseConfig();
 
 export const uploadImage = async (base64Data: string, userId: string): Promise<string | null> => {
+  if (!supabase) return null;
+  
   try {
-    // Convert base64 to Blob
-    const base64Response = await fetch(base64Data);
-    const blob = await base64Response.blob();
+    // Convert base64 to Blob without using fetch (more stable for large strings)
+    const base64Parts = base64Data.split(',');
+    if (base64Parts.length < 2) throw new Error('Invalid base64 data');
+    
+    const mimeType = base64Parts[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
+    const bstr = atob(base64Parts[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    const blob = new Blob([u8arr], { type: mimeType });
     
     const fileName = `${userId}/${Date.now()}.jpg`;
     const { data, error } = await supabase.storage
@@ -24,7 +47,11 @@ export const uploadImage = async (base64Data: string, userId: string): Promise<s
       });
 
     if (error) {
-      console.error('Error uploading image to Supabase Storage:', error);
+      if (error.message?.includes('Failed to fetch')) {
+        console.warn('Supabase storage is unreachable (Failed to fetch). Project may be paused.');
+      } else {
+        console.error('Error uploading image to Supabase Storage:', error);
+      }
       return null;
     }
 

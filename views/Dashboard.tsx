@@ -2,7 +2,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile, MealLog } from '../types';
 import { GOAL_COLORS } from '../constants';
-import { TrendingUp, Clock, Flame, X, Info, Zap, Trash2, AlertCircle } from 'lucide-react';
+import { TrendingUp, Clock, Flame, X, Info, Zap, Trash2, AlertCircle, Baby, Syringe, Heart, ChevronRight, Scale, LineChart } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface DashboardProps {
   profile: UserProfile;
@@ -12,6 +13,7 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ profile, logs, onDeleteLog, theme }) => {
+  const navigate = useNavigate();
   const [selectedMeal, setSelectedMeal] = useState<MealLog | null>(null);
   const [mealToDelete, setMealToDelete] = useState<MealLog | null>(null);
   const longPressTimer = useRef<number | null>(null);
@@ -73,18 +75,20 @@ const Dashboard: React.FC<DashboardProps> = ({ profile, logs, onDeleteLog, theme
       <div className="flex justify-between items-end">
         <div>
           <h2 className={`text-2xl font-black tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>Hello, {profile.name}!</h2>
-          <p className={`${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'} text-xs font-bold uppercase tracking-widest`}>Goal: {profile.goal}</p>
+          <p className={`${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'} text-xs font-bold uppercase tracking-widest`}>Baby's First Year Guide</p>
         </div>
         <div className="text-right">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Daily Streak</p>
-          <div className="flex items-center gap-1.5 text-orange-500 font-black">
-            <Flame size={20} fill="currentColor" />
-            <span className="text-lg">12 Days</span>
+          <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Shishu-Sneh</p>
+          <div className="flex items-center gap-1.5 text-emerald-600 font-black">
+            <Heart size={20} fill="currentColor" />
+            <span className="text-lg">Active</span>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4">
+      <div className="pt-2">
+        <h4 className={`text-lg font-black tracking-tight mb-4 px-2 ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Nutrition Budget</h4>
+        <div className="grid grid-cols-1 gap-4">
         <div className={`p-8 rounded-[2.5rem] shadow-xl border relative overflow-hidden transition-all duration-500 ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100 shadow-slate-200/50'}`}>
           <div className="flex justify-between items-start relative z-10">
             <div className="space-y-1">
@@ -120,9 +124,10 @@ const Dashboard: React.FC<DashboardProps> = ({ profile, logs, onDeleteLog, theme
           ))}
         </div>
       </div>
+    </div>
 
-      <div>
-        <div className="flex justify-between items-center mb-5">
+    <div>
+      <div className="flex justify-between items-center mb-5">
           <h4 className={`text-lg font-black tracking-tight ${theme === 'dark' ? 'text-slate-200' : 'text-slate-800'}`}>Daily Activity</h4>
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full">{todaysLogs.length} Records</span>
         </div>

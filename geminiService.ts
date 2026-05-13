@@ -2,7 +2,14 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { UserProfile, FoodAnalysisResult, LabelAnalysisResult, WeightLog, WeightAnalysis } from "./types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.API_KEY });
+const getAI = () => {
+  // Always use process.env.GEMINI_API_KEY as per platform guidelines
+  const apiKey = typeof process !== 'undefined' ? (process.env.GEMINI_API_KEY || process.env.API_KEY) : '';
+  if (!apiKey) {
+    console.warn("GEMINI_API_KEY or API_KEY not found in environment.");
+  }
+  return new GoogleGenAI({ apiKey: apiKey || '' });
+};
 
 const parseGeminiResponse = (text: string | undefined) => {
   if (!text) return {};
@@ -101,41 +108,57 @@ export async function analyzeFoodImage(
     prompt += `\n\nThe user provided the following additional details to clarify previous questions: ${JSON.stringify(userAnswers)}. Refine your previous estimation based on this info. Be very accurate.`;
   }
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: {
-      parts: [
-        { inlineData: { data: base64Image, mimeType: 'image/jpeg' } },
-        { text: prompt }
-      ]
-    },
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: FOOD_SCHEMA
-    }
-  });
+  try {
+    const response = await getAI().models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: {
+        parts: [
+          { inlineData: { data: base64Image, mimeType: 'image/jpeg' } },
+          { text: prompt }
+        ]
+      },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: FOOD_SCHEMA
+      }
+    });
 
-  return parseGeminiResponse(response.text);
+    return parseGeminiResponse(response.text);
+  } catch (err: any) {
+    console.error("Gemini Food Analysis Error:", err);
+    if (err.message?.includes('Failed to fetch')) {
+      throw new Error("Could not reach AI server. Please check your internet connection.");
+    }
+    throw err;
+  }
 }
 
 export async function analyzeLabelImage(base64Image: string): Promise<LabelAnalysisResult> {
   const prompt = `Perform OCR on this food label/ingredients list. Detect hidden sugars, palm oil, preservatives, and ultra-processed ingredients. Provide a health score (0-100) and healthier alternatives.`;
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: {
-      parts: [
-        { inlineData: { data: base64Image, mimeType: 'image/jpeg' } },
-        { text: prompt }
-      ]
-    },
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: LABEL_SCHEMA
-    }
-  });
+  try {
+    const response = await getAI().models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: {
+        parts: [
+          { inlineData: { data: base64Image, mimeType: 'image/jpeg' } },
+          { text: prompt }
+        ]
+      },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: LABEL_SCHEMA
+      }
+    });
 
-  return parseGeminiResponse(response.text);
+    return parseGeminiResponse(response.text);
+  } catch (err: any) {
+    console.error("Gemini Label Analysis Error:", err);
+    if (err.message?.includes('Failed to fetch')) {
+      throw new Error("Could not reach AI server. Please check your internet connection.");
+    }
+    throw err;
+  }
 }
 
 export async function getCoachInsights(history: any[], profile: UserProfile): Promise<string> {
@@ -147,7 +170,7 @@ export async function getCoachInsights(history: any[], profile: UserProfile): Pr
   3. One specific actionable tip for next week.
   Keep it under 150 words and use Markdown formatting.`;
 
-  const response = await ai.models.generateContent({
+  const response = await getAI().models.generateContent({
     model: 'gemini-3.1-pro-preview',
     contents: prompt
   });
@@ -164,7 +187,7 @@ export async function analyzeDailyIntake(dailyLogs: any[], profile: UserProfile)
   
   Provide a brief analysis (2-3 sentences) on whether this intake is good for their goal and give 1-2 specific suggestions for improvement or maintenance. Keep it concise and encouraging.`;
 
-  const response = await ai.models.generateContent({
+  const response = await getAI().models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: prompt
   });
@@ -179,7 +202,7 @@ export async function analyzeWeightProgress(logs: WeightLog[], profile: UserProf
   Determine if they are on track for their goal: ${profile.goal}.
   Provide specific tips and a summary.`;
 
-  const response = await ai.models.generateContent({
+  const response = await getAI().models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: prompt,
     config: {

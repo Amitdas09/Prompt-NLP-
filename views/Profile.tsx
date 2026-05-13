@@ -51,12 +51,18 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdate, theme }) => {
   };
 
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      alert(error.message);
-    } else {
-      // App.tsx handles the state change via onAuthStateChange
-      window.location.hash = '#/'; // Redirect to home/onboarding
+    try {
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
+    } catch (e) {
+      console.warn("Sign out error:", e);
+    } finally {
+      // Clear everything to ensure a fresh state even if Supabase is offline
+      localStorage.clear(); 
+      // Force return to starting path
+      window.location.hash = '/';
+      window.location.reload();
     }
   };
 

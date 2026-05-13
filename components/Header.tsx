@@ -11,7 +11,17 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ theme, onToggleTheme, user }) => {
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    try {
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
+    } catch (e) {
+      console.warn("Header sign out error:", e);
+    } finally {
+      localStorage.clear();
+      window.location.hash = '/';
+      window.location.reload();
+    }
   };
 
   return (
@@ -21,7 +31,10 @@ const Header: React.FC<HeaderProps> = ({ theme, onToggleTheme, user }) => {
           <div className="bg-emerald-600 p-1.5 rounded-lg text-white">
             <Zap size={20} fill="currentColor" />
           </div>
-          <span className={`font-bold text-xl tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>NuVision AI</span>
+          <div className="flex flex-col">
+            <span className={`font-bold text-xl tracking-tight leading-none ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>NuVision AI</span>
+            <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mt-1">Shishu-Sneh</span>
+          </div>
         </div>
         
         <div className="flex items-center gap-3">

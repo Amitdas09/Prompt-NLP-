@@ -9,6 +9,9 @@ import Profile from './views/Profile';
 import WeightTracker from './views/WeightTracker';
 import MealHistory from './views/MealHistory';
 import Onboarding from './views/Onboarding';
+import Milestones from './views/Milestones';
+import Vaccinations from './views/Vaccinations';
+import BabyHub from './views/BabyHub';
 import Header from './components/Header';
 import Navbar from './components/Navbar';
 import { supabase } from './lib/supabase';
@@ -24,6 +27,11 @@ const App: React.FC = () => {
   const [wasLoggedOut, setWasLoggedOut] = useState(false);
 
   useEffect(() => {
+    if (!supabase) {
+      loadLocalData();
+      return;
+    }
+
     // Listen for Auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: any) => {
       const newUser = session?.user ?? null;
@@ -45,7 +53,9 @@ const App: React.FC = () => {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      if (subscription) subscription.unsubscribe();
+    };
   }, []);
 
   const safeSetItem = (key: string, value: string, silent = false) => {
@@ -141,8 +151,15 @@ const App: React.FC = () => {
     setIsLoading(false);
   };
 
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   const fetchSupabaseData = async (userId: string) => {
+    if (!supabase) {
+      loadLocalData();
+      return;
+    }
     setIsLoading(true);
+    setFetchError(null);
     try {
       // Fetch Profile
       const { data: profileData, error: profileError } = await supabase
@@ -154,7 +171,11 @@ const App: React.FC = () => {
       if (profileData) {
         setProfile(profileData.data);
       } else if (profileError && profileError.code !== 'PGRST116') {
-        console.error('Error fetching profile:', profileError);
+        if (profileError.message?.includes('Failed to fetch')) {
+          setFetchError('Connection lost: Supabase server unreachable.');
+        } else {
+          console.error('Error fetching profile:', profileError);
+        }
       }
 
       // Fetch Logs
@@ -168,7 +189,8 @@ const App: React.FC = () => {
       if (logsData) {
         cloudLogs = logsData.map((l: any) => l.data);
       } else if (logsError) {
-        if (logsError.message === 'TypeError: Failed to fetch') {
+        if (logsError.message?.includes('Failed to fetch')) {
+          setFetchError('Connection lost: Supabase server unreachable.');
           console.warn('Supabase project may be paused or unreachable. Falling back to local data.');
         } else {
           console.error('Error fetching logs:', logsError);
@@ -186,11 +208,17 @@ const App: React.FC = () => {
       if (weightData) {
         cloudWeightLogs = weightData.map((l: any) => l.data);
       } else if (weightError) {
-        if (weightError.message === 'TypeError: Failed to fetch') {
-          console.warn('Supabase project may be paused or unreachable for weight logs.');
+        if (weightError.message?.includes('Failed to fetch')) {
+          setFetchError('Connection lost: Supabase server unreachable.');
         } else {
           console.error('Error fetching weight logs:', weightError);
         }
+      }
+
+      // If we had a fetch error, we stop here and let local data be used
+      if (logsError?.message?.includes('Failed to fetch') || weightError?.message?.includes('Failed to fetch')) {
+        loadLocalData();
+        return;
       }
 
       // Sync local data to cloud if cloud is empty but local has data
@@ -258,7 +286,7 @@ const App: React.FC = () => {
     setProfile(newProfile);
     safeSetItem('nuvision_profile', JSON.stringify(newProfile));
 
-    if (user) {
+    if (user && supabase) {
       const { error } = await supabase.from('profiles').upsert({
         user_id: user.id,
         data: newProfile,
@@ -277,9 +305,9 @@ const App: React.FC = () => {
     safeSaveLogs(updatedLogs);
 
     // Use getUser() directly to ensure we have the most up-to-date auth state
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    const currentUser = supabase ? (await supabase.auth.getUser()).data.user : null;
     
-    if (currentUser) {
+    if (currentUser && supabase) {
       try {
         const { error } = await supabase.from('meal_logs').upsert({
           user_id: currentUser.id,
@@ -319,8 +347,8 @@ const App: React.FC = () => {
     const updated = logs.filter(log => log.id !== id);
     safeSaveLogs(updated);
 
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
-    if (currentUser) {
+    const currentUser = supabase ? (await supabase.auth.getUser()).data.user : null;
+    if (currentUser && supabase) {
       console.log('Deleting from Supabase for user:', currentUser.id);
       const { error } = await supabase.from('meal_logs').delete().eq('id', id).eq('user_id', currentUser.id);
       if (error) {
@@ -336,8 +364,8 @@ const App: React.FC = () => {
     setWeightLogs(updatedLogs);
     safeSetItem('nuvision_weight_logs', JSON.stringify(updatedLogs));
 
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
-    if (currentUser) {
+    const currentUser = supabase ? (await supabase.auth.getUser()).data.user : null;
+    if (currentUser && supabase) {
       try {
         const { error } = await supabase.from('weight_logs').upsert({
           user_id: currentUser.id,
@@ -360,7 +388,7 @@ const App: React.FC = () => {
     setWeightLogs(updatedLogs);
     safeSetItem('nuvision_weight_logs', JSON.stringify(updatedLogs));
 
-    if (user) {
+    if (user && supabase) {
       const { error } = await supabase.from('weight_logs').delete().eq('id', id).eq('user_id', user.id);
       if (error) {
         console.error('Error deleting weight log from Supabase:', error);
@@ -379,6 +407,11 @@ const App: React.FC = () => {
   return (
     <Router>
       <div className={`h-full w-full flex flex-col transition-colors duration-300 ${!profile ? 'bg-white' : (theme === 'dark' ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-900')}`}>
+        {fetchError && (
+          <div className="bg-red-500 text-white text-[10px] py-1 text-center font-bold animate-in slide-in-from-top duration-500">
+            {fetchError} - Working in Offline Mode
+          </div>
+        )}
         {profile && <Header theme={theme} onToggleTheme={toggleTheme} user={user} />}
         <main className={`flex-1 overflow-y-auto container mx-auto px-4 max-w-2xl ${profile ? 'py-6 pb-24' : 'py-0'}`}>
           <Routes>
@@ -387,6 +420,9 @@ const App: React.FC = () => {
             ) : (
               <>
                 <Route path="/" element={<Dashboard profile={profile} logs={logs} onDeleteLog={deleteLog} theme={theme} />} />
+                <Route path="/baby" element={<BabyHub theme={theme} />} />
+                <Route path="/milestones" element={<Milestones theme={theme} />} />
+                <Route path="/vaccinations" element={<Vaccinations theme={theme} />} />
                 <Route path="/scanner" element={<Scanner profile={profile} logs={logs} onLog={addLog} theme={theme} user={user} />} />
                 <Route path="/history" element={<MealHistory profile={profile} logs={logs} onDeleteLog={deleteLog} theme={theme} />} />
                 <Route path="/weight" element={<WeightTracker profile={profile} weightLogs={weightLogs} onAddLog={addWeightLog} onDeleteLog={deleteWeightLog} theme={theme} />} />

@@ -1,6 +1,6 @@
 {
-  "name": "Copy of NuVision AI",
-  "description": "AI-powered nutrition assistant that analyzes food photos, labels",
+  "name": "NuVision AI (Shishu-Sneh)",
+  "description": "AI-powered nutrition assistant and Baby's First Year Guide. Track growth, vaccinations, and developmental milestones.",
   "requestFramePermissions": [
     "camera",
     "microphone"

@@ -85,3 +85,20 @@ export interface WeightAnalysis {
   tips: string[];
   summary: string;
 }
+
+export interface Milestone {
+  id: string;
+  week: number;
+  title: string;
+  description: string;
+  achieved: boolean;
+}
+
+export interface Vaccine {
+  id: string;
+  name: string;
+  disease: string;
+  recommendedAge: string;
+  date?: string;
+  status: 'pending' | 'taken';
+}

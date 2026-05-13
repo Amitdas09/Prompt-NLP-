@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { UserProfile, UserGoal, ActivityLevel } from '../types';
-import { Zap, ChevronRight, LogIn } from 'lucide-react';
+import { Zap, ChevronRight, LogIn, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface OnboardingProps {
@@ -15,6 +15,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, theme, initialLogin
   const [isLoginMode, setIsLoginMode] = useState(initialLoginMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
 
@@ -34,17 +35,29 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, theme, initialLogin
     setIsAuthLoading(true);
 
     try {
+      if (!supabase) {
+        throw new Error('Authentication service is currently unavailable. Please try again later or continue as guest.');
+      }
+      
       if (isLoginMode) {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) {
-          if (error.message.includes('Invalid login credentials')) {
+          if (error.message?.includes('Failed to fetch')) {
+            throw new Error('Network error: Could not reach authentication server. Please check your internet or Supabase project status.');
+          }
+          if (error.message?.includes('Invalid login credentials')) {
             throw new Error('Account does not exist or incorrect password. Please check your details or sign up.');
           }
           throw error;
         }
       } else {
         const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
+        if (error) {
+          if (error.message?.includes('Failed to fetch')) {
+            throw new Error('Network error: Could not reach authentication server. Please try again later.');
+          }
+          throw error;
+        }
         alert('Check your email for the confirmation link!');
       }
     } catch (err: any) {
@@ -102,7 +115,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, theme, initialLogin
             <Zap size={36} fill="white" className="text-white" />
           </div>
           <h1 className="text-4xl font-black text-slate-900 tracking-tight">NuVision AI</h1>
-          <p className="text-slate-500 font-medium">Empowering your health with Computer Vision</p>
+          <p className="text-slate-500 font-medium tracking-tight">Shishu-Sneh: Advanced Nutrition & Wellness Intelligence</p>
         </div>
 
         <div className="bg-white p-8 rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-slate-100 space-y-6">
@@ -137,14 +150,23 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, theme, initialLogin
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Password</label>
-                  <input
-                    type="password"
-                    required
-                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      required
+                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none font-bold pr-12"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-600 transition-colors"
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
                 {authError && <p className="text-red-500 text-[10px] font-bold px-1">{authError}</p>}
                 <button
@@ -269,7 +291,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, theme, initialLogin
         </div>
 
         <p className="text-center text-slate-400 text-[10px] uppercase font-black tracking-[0.2em]">
-          Vision Intelligence Engine v1.0
+          Powered by NuVision AI (Shishu-Sneh) • v1.0
         </p>
       </div>
     </div>

@@ -315,6 +315,14 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
       console.warn("startAnalysis called but no image is present.");
       return;
     }
+    
+    // Check for API key availability
+    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+    if (!apiKey || apiKey === 'undefined') {
+      alert("API Key is missing. Please set your GEMINI_API_KEY in the Secrets panel under Settings.");
+      return;
+    }
+
     setIsAnalyzing(true);
     console.log("Starting analysis for mode:", mode);
     try {
@@ -332,11 +340,13 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
       }
     } catch (error: any) {
       console.error("Analysis failed:", error);
-      const errorMsg = error?.message || "";
-      if (errorMsg.includes("API_KEY_INVALID") || errorMsg.includes("API key not found")) {
-        alert("Gemini API Key is missing or invalid. Please check your configuration.");
+      const errorMsg = error?.message || String(error);
+      if (errorMsg.includes("API_KEY_INVALID") || errorMsg.includes("API key not found") || errorMsg.includes("403") || errorMsg.includes("400")) {
+        alert("Gemini API Key is missing or invalid. Please check your Secrets in the Settings menu.");
+      } else if (errorMsg.includes("Failed to fetch") || errorMsg.includes("NetworkError")) {
+        alert("Network Error: Failed to connect to the analysis engine. Please ensure you have an active internet connection and that the API domain is not blocked by your network or VPN.");
       } else {
-        alert("Failed to analyze image. Please check your internet connection and try again.");
+        alert(`Analysis failed: ${errorMsg}. Please try again later.`);
       }
     } finally {
       setIsAnalyzing(false);
@@ -345,6 +355,13 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
 
   const refineAnalysis = async () => {
     if (!image) return;
+    
+    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+    if (!apiKey || apiKey === 'undefined') {
+      alert("API Key is missing. Please set your GEMINI_API_KEY in the Secrets panel.");
+      return;
+    }
+
     setIsAnalyzing(true);
     try {
       const base64Data = image.split(',')[1];
@@ -352,11 +369,13 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
       setFoodResult(result);
     } catch (error: any) {
       console.error("Refinement failed", error);
-      const errorMsg = error?.message || "";
-      if (errorMsg.includes("API_KEY_INVALID") || errorMsg.includes("API key not found")) {
-        alert("Gemini API Key is missing or invalid. Please check your configuration.");
+      const errorMsg = error?.message || String(error);
+      if (errorMsg.includes("API_KEY_INVALID") || errorMsg.includes("API key not found") || errorMsg.includes("403") || errorMsg.includes("400")) {
+        alert("Gemini API Key is missing or invalid. Please check your Secrets menu.");
+      } else if (errorMsg.includes("Failed to fetch") || errorMsg.includes("NetworkError")) {
+        alert("Network Error: Failed to connect to reaching analysis engine. Check your connection.");
       } else {
-        alert("Failed to refine analysis. Please try again.");
+        alert(`Failed to refine analysis: ${errorMsg}`);
       }
     } finally {
       setIsAnalyzing(false);
@@ -745,11 +764,23 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
                   </div>
 
                   {foodResult.ingredientsSummary && (
-                    <div className={`p-4 rounded-2xl border ${theme === 'dark' ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
-                      <p className={`text-xs font-bold leading-relaxed ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>
-                        <span className="font-black text-emerald-500 mr-1">Detected:</span>
-                        {foodResult.ingredientsSummary}
-                      </p>
+                    <div className={`p-4 rounded-2xl border flex items-start gap-3 ${theme === 'dark' ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+                      <div className="flex-1">
+                        <p className={`text-xs font-bold leading-relaxed ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>
+                          <span className="font-black text-emerald-500 mr-1">Detected:</span>
+                          {foodResult.ingredientsSummary}
+                        </p>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          setInitialDescription(foodResult.ingredientsSummary || '');
+                          const element = document.getElementById('refinement-textarea');
+                          element?.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className={`p-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${theme === 'dark' ? 'bg-slate-800 text-emerald-400 hover:bg-slate-700' : 'bg-white text-emerald-600 hover:bg-emerald-50 shadow-sm'}`}
+                      >
+                        Edit
+                      </button>
                     </div>
                   )}
 
@@ -792,6 +823,7 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
                         <div className="space-y-3">
                           <p className={`text-xs font-black tracking-tight ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>Correct or Add Details</p>
                           <textarea
+                            id="refinement-textarea"
                             value={initialDescription}
                             onChange={(e) => setInitialDescription(e.target.value)}
                             placeholder="If the scan is wrong, tell me what it is here..."
