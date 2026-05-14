@@ -179,12 +179,18 @@ const App: React.FC = () => {
     setFetchError(null);
 
     // Safety timeout to prevent getting stuck on loading screen
+    // Waking up a paused Supabase project can take ~20-30 seconds
     const loadingTimeout = setTimeout(() => {
       console.warn('Supabase data fetch timed out. Falling back to local data.');
-      setFetchError('Cloud sync is taking too long. Working in offline mode.');
+      setFetchError('Cloud server is taking a while to wake up. Working in offline mode for now.');
       setIsLoading(false);
       loadLocalData();
-    }, 8000); // 8 seconds safety margin
+    }, 25000); // Increased to 25 seconds for cold starts
+
+    // Set an intermediate warning if it's taking more than 5s
+    const warningTimeout = setTimeout(() => {
+      setFetchError('Waking up cloud server...');
+    }, 5000);
 
     try {
       // Fetch Profile
@@ -264,9 +270,19 @@ const App: React.FC = () => {
       }
 
       clearTimeout(loadingTimeout);
-    } catch (err) {
+      clearTimeout(warningTimeout);
+      setFetchError(null);
+    } catch (err: any) {
       clearTimeout(loadingTimeout);
+      clearTimeout(warningTimeout);
       console.error('Error in fetchSupabaseData:', err);
+      
+      if (err.message?.includes('Failed to fetch')) {
+        setFetchError('Cannot reach cloud server. Project might be paused or network is down.');
+      } else {
+        setFetchError('Could not sync with cloud. working offline.');
+      }
+      
       loadLocalData();
     } finally {
       setIsLoading(false);
@@ -405,8 +421,16 @@ const App: React.FC = () => {
     <Router>
       <div className={`h-full w-full flex flex-col transition-colors duration-300 ${!profile ? 'bg-white' : (theme === 'dark' ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-900')}`}>
         {fetchError && (
-          <div className="bg-red-500 text-white text-[10px] py-1 text-center font-bold animate-in slide-in-from-top duration-500">
-            {fetchError} - Working in Offline Mode
+          <div className="bg-red-500 text-white text-[10px] py-1 px-4 text-center font-bold animate-in slide-in-from-top duration-500 flex items-center justify-center gap-3">
+            <span className="flex-1">{fetchError}</span>
+            {user && (
+              <button 
+                onClick={() => fetchSupabaseData(user.id)}
+                className="bg-white/20 hover:bg-white/40 px-2 py-0.5 rounded-md uppercase tracking-widest text-[8px] border border-white/20 transition-all font-black shrink-0"
+              >
+                Retry
+              </button>
+            )}
           </div>
         )}
         {profile && <Header theme={theme} onToggleTheme={toggleTheme} user={user} />}

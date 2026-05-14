@@ -3,12 +3,16 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { UserProfile, FoodAnalysisResult, LabelAnalysisResult, WeightLog, WeightAnalysis } from "./types";
 
 const getAI = () => {
-  // Always use process.env.GEMINI_API_KEY as per platform guidelines
-  const apiKey = typeof process !== 'undefined' ? (process.env.GEMINI_API_KEY || process.env.API_KEY) : '';
+  // Check multiple possible sources for the API key to support AI Studio, dev, and exported builds
+  const apiKey = 
+    (typeof process !== 'undefined' ? (process.env.GEMINI_API_KEY || process.env.API_KEY) : '') ||
+    (import.meta.env.VITE_GEMINI_API_KEY) ||
+    '';
+
   if (!apiKey) {
-    console.warn("GEMINI_API_KEY or API_KEY not found in environment.");
+    console.warn("GEMINI_API_KEY not found in environment (process.env or import.meta.env).");
   }
-  return new GoogleGenAI({ apiKey: apiKey || '' });
+  return new GoogleGenAI({ apiKey });
 };
 
 const parseGeminiResponse = (text: string | undefined) => {

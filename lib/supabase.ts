@@ -1,33 +1,49 @@
 import { createClient } from '@supabase/supabase-js';
 
 const getSupabaseConfig = () => {
-  const url = import.meta.env.VITE_SUPABASE_URL?.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  // Normalize URL - handle project IDs, full URLs, and common copy-paste issues
+  let rawUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+  rawUrl = rawUrl.replace(/^["']|["']$/g, '').trim();
+  
+  if (rawUrl && !rawUrl.includes('.') && !rawUrl.startsWith('http')) {
+    rawUrl = `https://${rawUrl}.supabase.co`;
+  }
+
+  const url = rawUrl
+    .replace(/\/rest\/v1\/?$/, '')
+    .replace(/\/auth\/v1\/?$/, '')
+    .replace(/\/$/, '');
+    
+  let key = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+  key = key.replace(/^["']|["']$/g, '').trim();
   
   if (!url || !key) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('Supabase environment variables VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are missing.');
-    }
     return null;
+  }
+
+  // Detect if user provided a secret key instead of an anon key
+  if (key.startsWith('sb_secret_')) {
+    console.error('CRITICAL: You are using a Supabase SECRET key (sb_secret_...) in your client code. This is a security risk and will likely break authentication. Please use the public "anon" key instead.');
   }
   
-  console.log('Initializing Supabase with URL:', url);
-  try {
-    const client = createClient(url, key, {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true
-      }
-    });
-    return client;
-  } catch (err) {
-    console.error('Failed to initialize Supabase client:', err);
-    return null;
+  // Basic validation
+  if (!url.startsWith('https://') || !url.includes('.supabase.co')) {
+    console.error('Invalid Supabase URL format:', url);
   }
+
+  return { url, key };
 };
 
-export const supabase = getSupabaseConfig();
+const config = getSupabaseConfig();
+const supabase = config ? createClient(config.url, config.key, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true
+  }
+}) : null;
+
+export { supabase };
 
 export const uploadImage = async (base64Data: string, userId: string): Promise<string | null> => {
   if (!supabase) return null;

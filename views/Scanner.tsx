@@ -316,10 +316,13 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
       return;
     }
     
-    // Check for API key availability
-    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+    // Check for API key availability across different environments
+    const apiKey = 
+      (typeof process !== 'undefined' ? (process.env.GEMINI_API_KEY || process.env.API_KEY) : '') ||
+      (import.meta.env.VITE_GEMINI_API_KEY);
+
     if (!apiKey || apiKey === 'undefined') {
-      alert("API Key is missing. Please set your GEMINI_API_KEY in the Secrets panel under Settings.");
+      alert("API Configuration Missing: The AI vision features require a Gemini API Key. \n\nIf you are using this as a mobile app, please ensure you have set VITE_GEMINI_API_KEY in your build environment or .env file.");
       return;
     }
 
@@ -356,9 +359,12 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
   const refineAnalysis = async () => {
     if (!image) return;
     
-    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+    const apiKey = 
+      (typeof process !== 'undefined' ? (process.env.GEMINI_API_KEY || process.env.API_KEY) : '') ||
+      (import.meta.env.VITE_GEMINI_API_KEY);
+
     if (!apiKey || apiKey === 'undefined') {
-      alert("API Key is missing. Please set your GEMINI_API_KEY in the Secrets panel.");
+      alert("API Key is missing. For mobile apps, set VITE_GEMINI_API_KEY in your build environment.");
       return;
     }
 

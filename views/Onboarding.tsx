@@ -56,9 +56,17 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, theme, initialLogin
     try {
       if (!supabase) {
         clearTimeout(timeoutId);
-        throw new Error('Authentication service is currently unavailable. Please try again later or continue as guest.');
+        throw new Error('Authentication service is currently unavailable. Please check your VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY variables.');
+      }
+
+      // Check for secret key usage - common mistake
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+      if (anonKey.startsWith('sb_secret_')) {
+        clearTimeout(timeoutId);
+        throw new Error('You are using a "Service Role" secret key. Authentication only works with the public "anon" key. Please check your Supabase dashboard for the Anon key.');
       }
       
+      console.log(`Supabase Auth Attempt: ${isLoginMode ? 'Login' : 'Signup'} for ${email}`);
       const { data, error } = isLoginMode 
         ? await supabase.auth.signInWithPassword({ email, password })
         : await supabase.auth.signUp({ email, password });
@@ -66,16 +74,11 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, theme, initialLogin
       clearTimeout(timeoutId);
       
       if (error) {
+        console.error('Supabase Auth Error:', error);
         if (error.message?.includes('Failed to fetch')) {
-          throw new Error('Network error: Could not reach authentication server. Please check your internet.');
+          throw new Error('Network error: Could not reach Supabase. Check your internet or project URL.');
         }
-        if (error.message?.includes('Invalid login credentials')) {
-          throw new Error('Incorrect email or password. Please try again.');
-        }
-        if (error.status === 400 && error.message?.includes('Email not confirmed')) {
-          throw new Error('Please check your email and confirm your account before logging in.');
-        }
-        throw error;
+        throw new Error(error.message || 'Authentication failed');
       }
 
       if (!isLoginMode && data?.user && !data.session) {

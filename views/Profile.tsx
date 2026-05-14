@@ -152,6 +152,54 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdate, theme }) => {
         </div>
       </div>
 
+      <div className={`p-6 rounded-3xl shadow-sm border space-y-4 transition-colors ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+        <h3 className={`font-bold text-sm uppercase tracking-widest ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>Cloud Configuration</h3>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-500">Database (Supabase)</span>
+              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${supabase ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                {supabase ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
+            {!supabase && (
+              <div className="bg-rose-500/5 p-2 rounded-lg border border-rose-500/10">
+                <p className="text-[10px] text-rose-400 font-bold mb-1">Missing variables:</p>
+                {!import.meta.env.VITE_SUPABASE_URL && <p className="text-[9px] text-slate-400 font-mono">- VITE_SUPABASE_URL</p>}
+                {!import.meta.env.VITE_SUPABASE_ANON_KEY && <p className="text-[9px] text-slate-400 font-mono">- VITE_SUPABASE_ANON_KEY</p>}
+              </div>
+            )}
+            {supabase && (
+              <p className="text-[10px] text-slate-400 font-mono truncate bg-slate-50/50 dark:bg-slate-800/50 p-2 rounded-lg">
+                ID: {import.meta.env.VITE_SUPABASE_URL?.split('://')[1]?.split('.')[0] || 'Unknown'}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-500">AI Vision (Gemini)</span>
+              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${(process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY) ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                {(process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY) ? 'Active' : 'Missing Key'}
+              </span>
+            </div>
+            {!(process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY) && (
+              <div className="bg-rose-500/5 p-2 rounded-lg border border-rose-500/10">
+                <p className="text-[10px] text-rose-400 font-bold mb-1">Missing for mobile:</p>
+                <p className="text-[9px] text-slate-400 font-mono">- VITE_GEMINI_API_KEY</p>
+              </div>
+            )}
+          </div>
+          
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+            <p className="text-[10px] text-slate-400 italic leading-relaxed">
+              <span className="font-bold text-slate-500 block mb-1">Mobile Build Tip:</span>
+              Ensure you have a <code className="text-blue-400">.env</code> file in your project root with these <code className="text-blue-400">VITE_</code> variables before running your build command.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <button
         onClick={handleLogout}
         className={`w-full flex items-center justify-center gap-2 font-bold py-4 rounded-2xl transition-all border-2 ${theme === 'dark' ? 'border-red-900/30 text-red-400 hover:bg-red-950/30' : 'border-red-100 text-red-600 hover:bg-red-50'}`}
