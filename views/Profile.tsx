@@ -179,10 +179,22 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdate, theme }) => {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-slate-500">AI Vision (Gemini)</span>
-              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${(process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY) ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                {(process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY) ? 'Active' : 'Missing Key'}
+              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${(process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || localStorage.getItem('user_gemini_api_key')) ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                {(process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || localStorage.getItem('user_gemini_api_key')) ? 'Active' : 'Missing Key'}
               </span>
             </div>
+            <button 
+              onClick={() => {
+                const key = prompt("Enter your Gemini API Key:", localStorage.getItem('user_gemini_api_key') || '');
+                if (key !== null) {
+                  localStorage.setItem('user_gemini_api_key', key.trim());
+                  window.location.reload();
+                }
+              }}
+              className="text-[10px] text-blue-500 font-bold hover:underline"
+            >
+              {localStorage.getItem('user_gemini_api_key') ? 'Update Saved Key' : 'Setup Key for Mobile'}
+            </button>
             {!(process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY) && (
               <div className="bg-rose-500/5 p-2 rounded-lg border border-rose-500/10">
                 <p className="text-[10px] text-rose-400 font-bold mb-1">Missing for mobile:</p>
@@ -193,8 +205,8 @@ const Profile: React.FC<ProfileProps> = ({ profile, onUpdate, theme }) => {
           
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
             <p className="text-[10px] text-slate-400 italic leading-relaxed">
-              <span className="font-bold text-slate-500 block mb-1">Mobile Build Tip:</span>
-              Ensure you have a <code className="text-blue-400">.env</code> file in your project root with these <code className="text-blue-400">VITE_</code> variables before running your build command.
+              <span className="font-bold text-slate-500 block mb-1 underline">Mobile Troubleshooting:</span>
+              If features are "Missing" on your phone, you must add <code className="text-blue-400">VITE_GEMINI_API_KEY</code>, <code className="text-blue-400">VITE_SUPABASE_URL</code>, and <code className="text-blue-400">VITE_SUPABASE_ANON_KEY</code> to your <code className="text-blue-400">.env</code> file in the project root before building the app.
             </p>
           </div>
         </div>

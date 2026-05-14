@@ -4,13 +4,17 @@ import { UserProfile, FoodAnalysisResult, LabelAnalysisResult, WeightLog, Weight
 
 const getAI = () => {
   // Check multiple possible sources for the API key to support AI Studio, dev, and exported builds
-  const apiKey = 
+  const rawKey = 
     (typeof process !== 'undefined' ? (process.env.GEMINI_API_KEY || process.env.API_KEY) : '') ||
     (import.meta.env.VITE_GEMINI_API_KEY) ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('user_gemini_api_key') : '') ||
     '';
 
+  const apiKey = (rawKey === 'undefined' || !rawKey) ? '' : rawKey;
+
   if (!apiKey) {
-    console.warn("GEMINI_API_KEY not found in environment (process.env or import.meta.env).");
+    console.error("CRITICAL: Gemini API Key is missing. Ensure VITE_GEMINI_API_KEY is set in your environment.");
+    // We still return the instance, but it will fail on first request with a clearer console error
   }
   return new GoogleGenAI({ apiKey });
 };

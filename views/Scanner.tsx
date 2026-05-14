@@ -317,12 +317,18 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
     }
     
     // Check for API key availability across different environments
+    // Vite's 'define' in config handles process.env.GEMINI_API_KEY, while VITE_ prefix is standard for client
     const apiKey = 
       (typeof process !== 'undefined' ? (process.env.GEMINI_API_KEY || process.env.API_KEY) : '') ||
-      (import.meta.env.VITE_GEMINI_API_KEY);
+      (import.meta.env.VITE_GEMINI_API_KEY) ||
+      localStorage.getItem('user_gemini_api_key');
 
-    if (!apiKey || apiKey === 'undefined') {
-      alert("API Configuration Missing: The AI vision features require a Gemini API Key. \n\nIf you are using this as a mobile app, please ensure you have set VITE_GEMINI_API_KEY in your build environment or .env file.");
+    if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
+      const pasteKey = prompt("AI Configuration Missing: This feature needs a Gemini API Key.\n\nOption 1: Add 'VITE_GEMINI_API_KEY' to your .env file before building.\nOption 2: Paste your API Key here temporarily to test:");
+      if (pasteKey && pasteKey.length > 10) {
+        localStorage.setItem('user_gemini_api_key', pasteKey.trim());
+        alert("Key saved locally! Please try scanning again.");
+      }
       return;
     }
 
@@ -361,10 +367,11 @@ const Scanner: React.FC<ScannerProps> = ({ profile, logs, onLog, theme, user }) 
     
     const apiKey = 
       (typeof process !== 'undefined' ? (process.env.GEMINI_API_KEY || process.env.API_KEY) : '') ||
-      (import.meta.env.VITE_GEMINI_API_KEY);
+      (import.meta.env.VITE_GEMINI_API_KEY) ||
+      localStorage.getItem('user_gemini_api_key');
 
-    if (!apiKey || apiKey === 'undefined') {
-      alert("API Key is missing. For mobile apps, set VITE_GEMINI_API_KEY in your build environment.");
+    if (!apiKey || apiKey === 'undefined' || apiKey.length < 10) {
+      alert("Gemini API Key missing. Please set it in your build environment or paste it when prompted during a scan.");
       return;
     }
 

@@ -6,10 +6,17 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "mobile:init": "npx cap init",
+    "mobile:add-android": "npx cap add android",
+    "mobile:sync": "npm run build && npx cap copy && npx cap sync",
+    "mobile:open-android": "npx cap open android",
     "preview": "vite preview",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
     "@google/genai": "^1.40.0",
     "@supabase/supabase-js": "^2.99.0",
     "lucide-react": "^0.460.0",
